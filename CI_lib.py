@@ -1,18 +1,13 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+"""
+@author: Ilario Gelmetti
+"""
 # Import required packages
 import numpy as np
 import pandas as pd
-from tkinter.filedialog import askopenfilename
 from sklearn.linear_model import LinearRegression
 
-def get_resistance(*args):
-    if len(args) == 1:
-        file_path = args[0]
-    else:
-        file_path = askopenfilename(filetypes=[("EC-Lab Text Format", ".mpt")],title='Choose the CI file to analyse')
-    
+def get_resistance(file_path):    
     print(file_path)
     # Loop the data lines to find the row where the data starts, which is when the number of tabulations stops increasing
     with open(file_path, 'r', encoding='latin-1') as temp_f:
@@ -38,13 +33,13 @@ def get_resistance(*args):
     # Close file
     temp_f.close()
     skiprows_list = []
-    skiprows_list.extend(range(first_long_row))
+    skiprows_list.extend(range(first_long_row-1))
     
     df = pd.read_csv(file_path, sep='\t', decimal=decimal_separator, skiprows=lambda x: x in skiprows_list)
         
     # Plot and show our data
     potential=df['Ewe/V']
-    current=df['I/mA']*1000
+    current=df['I/mA']/1000
     time=df['time/s']
     controlCurrent=df['control/mA']
     dControlCurrent=np.diff(controlCurrent)
@@ -54,6 +49,10 @@ def get_resistance(*args):
     
     for j, i in enumerate(np.nditer(currentStepsIndexes)):
         resistance_original=(potential[i]-potential[i+1])/(current[i]-current[i+1])
+        resistance_original2=(potential[i]-potential[i+2])/(current[i]-current[i+1])
+        print("--------------")
+        print("Standard CI: " + str(resistance_original))
+        print("Standard CI skipping the first point: " + str(resistance_original2))
         resistance_original_arr.append(resistance_original)
         # x should be provided vertical, reshape does this
         if resistance_original > 0:
@@ -64,7 +63,10 @@ def get_resistance(*args):
 
         x = np.array(time[(i+start):(i+7)]).reshape((-1, 1))
         y = np.array(potential[(i+start):(i+7)])
-        
+    #    xa= np.array(time[int(i):(i+7)])
+    #    ya= np.array(potential[int(i):(i+7)])
+    #    print(xa)
+    #    print(ya)
     #    print("x")
     #    print(x)
     #    print("y")
@@ -76,13 +78,17 @@ def get_resistance(*args):
         y_pred = model.predict(x[0:1])[0]
     #    print("y_pred")
     #    print(y_pred)
-        resistance_arr.append((potential[i]-y_pred)/(current[i]-current[i+1]))
+        resistance = (potential[i]-y_pred)/(current[i]-current[i+1])
+        print("Fitted CI: " + str(resistance))
+        resistance_arr.append(resistance)
     
+#    print(resistance_arr)
+#    print(resistance_original_arr)
     resistance_mean = sum(resistance_arr)/len(resistance_arr)
     resistance_original_mean = sum(resistance_original_arr)/len(resistance_original_arr)
     resistance_std = np.std(resistance_arr)
     resistance_original_std = np.std(resistance_original_arr)
-    
+    print("--------------")
     print("Standard CI would say " + str(resistance_original_mean) + 
           " ohm with STD of " + str(resistance_original_std) + 
           " ohm. Fitting says " + str(resistance_mean) + " ohm with STD of " + 
