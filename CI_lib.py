@@ -88,9 +88,10 @@ def get_resistance(file_path):
     resistance_original_mean = sum(resistance_original_arr)/len(resistance_original_arr)
     resistance_std = np.std(resistance_arr)
     resistance_original_std = np.std(resistance_original_arr)
+    overall_mean = (resistance_original_mean/resistance_original_std**2 + resistance_mean/resistance_std**2)/(1/resistance_std**2 + 1/resistance_original_std**2)
     print("--------------")
     print("Standard CI would say " + str(resistance_original_mean) + 
           " ohm with STD of " + str(resistance_original_std) + 
           " ohm. Fitting says " + str(resistance_mean) + " ohm with STD of " + 
-          str(resistance_std) + " ohm.")
-    return(resistance_mean)
+          str(resistance_std) + " ohm. Returning the weighted average of the two: " + str(overall_mean) + " ohm.")
+    return(overall_mean)
