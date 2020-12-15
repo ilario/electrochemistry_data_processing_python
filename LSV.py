@@ -35,8 +35,8 @@ def analyse_file(file_path):
     reference_original = 0
     reference_suggested = ''
     column_count_prev = 0
-    first_data_row = 0
     first_long_row = 0
+    first_data_row = 0
     reference_found = False
     surface_found = False
     with open(file_path, 'r', encoding='latin-1') as temp_f:
@@ -77,7 +77,7 @@ def analyse_file(file_path):
             
     # Close file
     temp_f.close()
-    return first_long_row, reference_suggested, reference_original, surface, decimal_separator
+    return first_long_row, first_data_row, reference_suggested, reference_original, surface, decimal_separator
 
 
 # Edit the font, font size, and axes width
@@ -114,6 +114,16 @@ root.withdraw()
 config['DEFAULT']['color_scheme'] = config['DEFAULT'].get('color_scheme') or simpledialog.askstring('Set color scheme','Qualitative color schemes: Pastel1, Pastel2, Paired, Accent, Dark2, Set1, Set2, Set3, tab10, tab20, tab20b, tab20c', initialvalue='tab20')
 colors = cm.get_cmap(config['DEFAULT']['color_scheme'])
 
+if config['DEFAULT'].get('xmin') and config['DEFAULT'].get('xmax') and config['DEFAULT'].get('ymin') and config['DEFAULT'].get('ymax'):
+    axis_limits_preset = True
+else:
+    axis_limits_preset = False
+
+if not config['DEFAULT'].get('r_correct'):
+    config['DEFAULT']['r_correct'] = str(simpledialog.askfloat('Resistance correction value','1 = full resistance correction, 0 = no resistance correction', initialvalue=1))
+if not config['DEFAULT'].get('reference_string'):
+    config['DEFAULT']['reference_string'] = simpledialog.askstring('Set reference electrode name','Name of the wanted reference potential', initialvalue=reference_suggested)
+    
 # Create figure and add axes object
 #fig = plt.figure(figsize=(3.5, 3.5))#one column
 fig = plt.figure(figsize=(7.2, 4.5))#full width
@@ -124,7 +134,6 @@ xmax=-1000
 ymin=1000
 ymax=-1000
 color_index = []
-config['DEFAULT']['reference_string'] = ''
 reference_new = 'unset'
 
 for j,file_path in enumerate(files_paths):
@@ -142,61 +151,76 @@ for j,file_path in enumerate(files_paths):
         config[file_path]['label_string'] = config[file_path].get('label_string') or label_suggested
         config[file_path]['resistance'] = config[file_path].get('resistance') or str(find_ci_mean(dir_name, file_name))
     else:
-        first_long_row, reference_suggested, reference_original, surface, decimal_separator = analyse_file(file_path)
+        first_long_row, first_data_row, reference_suggested, reference_original, surface, decimal_separator = analyse_file(file_path)
         config[file_path] = {}
         config[file_path]['first_long_row'] = str(first_long_row)
+        config[file_path]['first_data_row'] = str(first_data_row)
         config[file_path]['decimal_separator'] = str(decimal_separator)
         config[file_path]['label_string'] = simpledialog.askstring('Set legend entry','Legend entry for '+file_name, initialvalue=label_suggested)   
         label_string_nosub = config[file_path]['label_string'].replace('$_{','').replace('}$','') 
         config[file_path]['surface'] = str(simpledialog.askfloat('Set working electrode surface area','Electrode surface area in cm2 for '+file_name, initialvalue=surface))
         config[file_path]['reference_original'] = str(simpledialog.askfloat('Set reference electrode potential','Potential of employed reference electrode for '+file_name, initialvalue=reference_original))
         config[file_path]['resistance'] = str(simpledialog.askfloat('Set resistance for iR correction','Resistance for iR correction of '+file_name, initialvalue=find_ci_mean(dir_name, file_name)))
-        if not config['DEFAULT']['reference_string']:
-            config['DEFAULT']['reference_string'] = simpledialog.askstring('Set reference electrode name','Name of the wanted reference potential for '+label_string_nosub, initialvalue=reference_suggested)
         config[file_path]['reference_new'] = str(simpledialog.askfloat('Set wanted reference potential','Wanted potential reference for '+label_string_nosub, initialvalue=float(config[file_path].get('reference_new') or config[file_path]['reference_original'])))
         config[file_path]['color_index'] = str(simpledialog.askinteger('Set index of color','Color index for '+label_string_nosub, initialvalue=j))
 
     if not config[file_path]['resistance']:
         print("RESISTANCE NOT CORRECTED!")
     
-with open(files_paths[0] + '.ini', 'w') as configfile:
-    config.write(configfile)
-    configfile.close()
+
 
 for j,file_path in enumerate(files_paths):
-    skiprows_list = range(int(config[file_path]['first_long_row']))
-    #skiprows_list.extend()
-    # skip also a few of the first points, as they are usually just transients
-    skiprows_list.extend(range(int(config[file_path]['first_long_row'])+1,int(config[file_path]['first_long_row'])+10))
+    first_long_row = int(config[file_path]['first_long_row'])
+    first_data_row = int(config[file_path]['first_data_row'])
+   # skip also a few of the first points, as they are usually just transients
+    skiprows_list = list(range(first_long_row)) + list(range(first_long_row+1,first_data_row+10))
     print(file_path)
     df = pd.read_csv(file_path, sep='\t', decimal=config[file_path]['decimal_separator'], skiprows=lambda x: x in skiprows_list)
         
     # Plot and show our data
     potential=df['Ewe/V']
     current=df['<I>/mA']
-    x=(potential + float(config[file_path]['reference_original']) - float(config[file_path]['reference_new'])) - (float(config[file_path]['resistance'])*current/1000)
+    resistance = float(config[file_path]['resistance'])*float(config['DEFAULT']['r_correct'])
+    x=potential  - (resistance*current/1000) + float(config[file_path]['reference_new']) + float(config[file_path]['reference_original'])
     y=current/float(config[file_path]['surface'])
 
     ax.plot(x, y, linewidth=3, color=colors(int(config[file_path]['color_index'])), label=config[file_path]['label_string'])#alpha=0.8)
-    xmin = x.min() if x.min() < xmin else xmin
-    xmax = x.max() if x.max() > xmax else xmax
-    ymin = y.min() if y.min() < ymin else ymin
-    ymax = y.max() if y.max() > ymax else ymax
+    if not axis_limits_preset:
+        xmin = x.min() if x.min() < xmin else xmin
+        xmax = x.max() if x.max() > xmax else xmax
+        ymin = y.min() if y.min() < ymin else ymin
+        ymax = y.max() if y.max() > ymax else ymax
     
 ax.xaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', top='on')
 ax.xaxis.set_tick_params(which='minor', size=4, width=1, direction='in', top='on')
 ax.yaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', right='on')
 ax.yaxis.set_tick_params(which='minor', size=4, width=1, direction='in', right='on')
 
+x_label = 'E_{WE} [V]'
 # Add the x and y-axis labels
-if config['DEFAULT']['reference_string']:
-    ax.set_xlabel('E$_{WE}$ [V] vs. ' + config['DEFAULT']['reference_string'], labelpad=10)
+if config['DEFAULT'].get('reference_string'):
+   # if isinstance(config['DEFAULT'].get('reference_string'),str):
+    x_label = x_label + ' vs. ' + config['DEFAULT']['reference_string']
+if float(config['DEFAULT']['r_correct']):
+    x_label = x_label + ' corrected'
 else:
-    ax.set_xlabel('E$_{WE}$ [V]', labelpad=10)   
+    x_label = x_label + ' uncorrected'
+
+ax.set_xlabel(x_label, labelpad=10) 
 ax.set_ylabel('Current [mA/cm$^2$]', labelpad=10)
 
-ax.set_xlim(xmin-0.02*(xmax-xmin), xmax+0.02*(xmax-xmin))
-ax.set_ylim(ymin-0.05*(ymax-ymin), ymax+0.05*(ymax-ymin))
+if not axis_limits_preset:
+    config['DEFAULT']['xmin'] = str(xmin-0.02*(xmax-xmin))
+    config['DEFAULT']['xmax'] = str(xmax+0.02*(xmax-xmin))
+    config['DEFAULT']['ymin'] = str(ymin-0.05*(ymax-ymin))
+    config['DEFAULT']['ymax'] = str(ymax+0.05*(ymax-ymin))
+
+with open(files_paths[0] + '.ini', 'w') as configfile:
+    config.write(configfile)
+    configfile.close()
+
+ax.set_xlim(float(config['DEFAULT'].get('xmin')),float(config['DEFAULT'].get('xmax')))
+ax.set_ylim(float(config['DEFAULT'].get('ymin')),float(config['DEFAULT'].get('ymax')))
 
 handles, labels = ax.get_legend_handles_labels()
 ax.legend(handles, labels)
