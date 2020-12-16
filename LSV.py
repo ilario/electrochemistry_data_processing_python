@@ -6,15 +6,18 @@ import os
 import matplotlib.pyplot as plt
 import pandas as pd
 from pylab import cm
+import numpy as np #import diff,std,mean,array
+from json import loads as jsonloads
 import tkinter as tk
-from tkinter.filedialog import askopenfilenames
+from tkinter.filedialog import askopenfilename
 from tkinter import simpledialog
+from tkinter import messagebox
 import re
 import sys
 import configparser
 import CI_lib
 
-def find_ci_mean(dir_name, file_name):
+def find_ci_mean_min(dir_name, file_name):
     file_path_CI_scheme_1 = re.sub(r'_\d\d_LSV_C\d\d.mpt$', '_', file_name)
     file_path_CI_scheme_2 = re.sub(r'.*_\d\d_LSV_C(\d\d).mpt$', '_C\g<1>.mpt', file_name)
     file_path_CI_scheme_regex = re.escape(file_path_CI_scheme_1) + '\\d\\d_CI' + re.escape(file_path_CI_scheme_2)
@@ -25,10 +28,10 @@ def find_ci_mean(dir_name, file_name):
         resistance_CI = CI_lib.get_resistance(os.path.join(dir_name, currInt_name))
         resistance_arr.append(resistance_CI)
     if resistance_arr:
-        resistance_mean = sum(resistance_arr)/len(resistance_arr)
+        resistance_min = min(resistance_arr)
     else:
-        resistance_mean = 0
-    return resistance_mean
+        resistance_min = 0
+    return resistance_min
 
 def analyse_file(file_path):
     # Loop the data lines to find the row where the data starts, which is when the number of tabulations stops increasing
@@ -36,12 +39,12 @@ def analyse_file(file_path):
     reference_suggested = ''
     column_count_prev = 0
     first_long_row = 0
-    first_data_row = 0
+    skip_points = []
     reference_found = False
     surface_found = False
     with open(file_path, 'r', encoding='latin-1') as temp_f:
         lines = temp_f.readlines()
-        for i, line in enumerate(lines):
+        for i, line in enumerate(lines[0:200]):
             # Count the column count for the current line
             column_count = len(line.split('\t')) + 1
     
@@ -52,8 +55,10 @@ def analyse_file(file_path):
             
             # remove lines with mode 3 which is open circuit, which typically happens when the safety limit is passed
             if line[0] == '3':
-                #if more than one, take the last loop
-                first_data_row = i
+                skip_points.append(i)
+            #if more than one, take the last loop
+            if line[0:4] == 'Loop':
+                first_data_row = int(str.split(line)[5])
             if not reference_found:
                 if line[0:19] == 'Reference electrode':
                     try:
@@ -68,7 +73,8 @@ def analyse_file(file_path):
                 if line[0:22] == 'Electrode surface area':
                     surface_found = True
                     surface = float(line[25:30].replace(',','.'))
-            
+        if not first_data_row:
+            first_data_row = first_long_row
         #take the last line and check if the decimal separator is comma or period
         if ',' in lines[i]:
             decimal_separator = ','
@@ -77,11 +83,30 @@ def analyse_file(file_path):
             
     # Close file
     temp_f.close()
-    return first_long_row, first_data_row, reference_suggested, reference_original, surface, decimal_separator
+    return first_long_row, skip_points, first_data_row, reference_suggested, reference_original, surface, decimal_separator
+
+#copied from https://towardsdatascience.com/5-ways-to-detect-outliers-that-every-data-scientist-should-know-python-code-70a54335a623
+def find_outliers(data):
+    #define a list to accumlate outliers
+    outliers_indexes = []
+    
+    # Set upper and lower limit to X standard deviation
+    # this should be done locally, as the mean will vary locally...
+    data_std = np.std(data)
+    data_mean = np.mean(data)
+    cut_off = data_std * 3#3 would be the common value here
+    
+    lower_limit = data_mean - cut_off 
+    upper_limit = data_mean + cut_off
+    # Generate outliers
+    for i, outlier_candidate in enumerate(data):
+        if outlier_candidate > upper_limit or outlier_candidate < lower_limit:
+            outliers_indexes.append(i)
+    return outliers_indexes
 
 
 # Edit the font, font size, and axes width
-plt.rcParams['font.size'] = 18
+plt.rcParams['font.size'] = 14
 plt.rcParams['axes.linewidth'] = 2
 
 config = configparser.ConfigParser()
@@ -90,16 +115,22 @@ if len(sys.argv) > 1:
     #with open(sys.argv[1], 'r') as batch_f:
     config_file = sys.argv[1]
 else:
-    config_file = askopenfilenames(filetypes=[("EC scripts configuration", ".ini")],title='Choose the configuration file or skip')
+    config_file = askopenfilename(filetypes=[("EC scripts configuration", ".ini")],title='Choose the configuration file or skip')
 
+files_paths= []
 if config_file:
     automated = True
     config.read(config_file)
     files_paths = config.sections()
 else:
     automated = False
-    files_paths = askopenfilenames(filetypes=[("EC-Lab Text Format", ".mpt")],title='Choose the files to plot')
-    
+    while True:
+        selected_file = askopenfilename(filetypes=[("EC-Lab Text Format", ".mpt")],title='Choose the file to plot')
+        if selected_file:
+            files_paths.append(selected_file)
+        else:
+            break
+        
 if not len(files_paths):
     sys.exit()
     
@@ -121,9 +152,9 @@ else:
 
 if not config['DEFAULT'].get('r_correct'):
     config['DEFAULT']['r_correct'] = str(simpledialog.askfloat('Resistance correction value','1 = full resistance correction, 0 = no resistance correction', initialvalue=1))
-if not config['DEFAULT'].get('reference_string'):
-    config['DEFAULT']['reference_string'] = simpledialog.askstring('Set reference electrode name','Name of the wanted reference potential', initialvalue=reference_suggested)
-    
+  
+if not config['DEFAULT'].get('normalize_surface'):
+    config['DEFAULT']['normalize_surface'] = str(messagebox.askyesno('Normalize current over surface','Do you want to plot the current over surface?'))
 # Create figure and add axes object
 #fig = plt.figure(figsize=(3.5, 3.5))#one column
 fig = plt.figure(figsize=(7.2, 4.5))#full width
@@ -149,10 +180,12 @@ for j,file_path in enumerate(files_paths):
     
     if automated:
         config[file_path]['label_string'] = config[file_path].get('label_string') or label_suggested
-        config[file_path]['resistance'] = config[file_path].get('resistance') or str(find_ci_mean(dir_name, file_name))
+        config[file_path]['resistance'] = config[file_path].get('resistance') or str(find_ci_mean_min(dir_name, file_name))
     else:
-        first_long_row, first_data_row, reference_suggested, reference_original, surface, decimal_separator = analyse_file(file_path)
+        first_long_row, skip_points, first_data_row, reference_suggested, reference_original, surface, decimal_separator = analyse_file(file_path)
         config[file_path] = {}
+        if not config['DEFAULT'].get('reference_string'):
+            config['DEFAULT']['reference_string'] = simpledialog.askstring('Set reference electrode name','Name of the wanted reference potential', initialvalue=reference_suggested)
         config[file_path]['first_long_row'] = str(first_long_row)
         config[file_path]['first_data_row'] = str(first_data_row)
         config[file_path]['decimal_separator'] = str(decimal_separator)
@@ -160,10 +193,9 @@ for j,file_path in enumerate(files_paths):
         label_string_nosub = config[file_path]['label_string'].replace('$_{','').replace('}$','') 
         config[file_path]['surface'] = str(simpledialog.askfloat('Set working electrode surface area','Electrode surface area in cm2 for '+file_name, initialvalue=surface))
         config[file_path]['reference_original'] = str(simpledialog.askfloat('Set reference electrode potential','Potential of employed reference electrode for '+file_name, initialvalue=reference_original))
-        config[file_path]['resistance'] = str(simpledialog.askfloat('Set resistance for iR correction','Resistance for iR correction of '+file_name, initialvalue=find_ci_mean(dir_name, file_name)))
+        config[file_path]['resistance'] = str(simpledialog.askfloat('Set resistance for iR correction','Resistance for iR correction of '+file_name, initialvalue=find_ci_mean_min(dir_name, file_name)))
         config[file_path]['reference_new'] = str(simpledialog.askfloat('Set wanted reference potential','Wanted potential reference for '+label_string_nosub, initialvalue=float(config[file_path].get('reference_new') or config[file_path]['reference_original'])))
         config[file_path]['color_index'] = str(simpledialog.askinteger('Set index of color','Color index for '+label_string_nosub, initialvalue=j))
-
     if not config[file_path]['resistance']:
         print("RESISTANCE NOT CORRECTED!")
     
@@ -173,16 +205,59 @@ for j,file_path in enumerate(files_paths):
     first_long_row = int(config[file_path]['first_long_row'])
     first_data_row = int(config[file_path]['first_data_row'])
    # skip also a few of the first points, as they are usually just transients
-    skiprows_list = list(range(first_long_row)) + list(range(first_long_row+1,first_data_row+10))
+    skiprows_list = list(range(first_long_row)) + list(range(first_long_row+1,first_data_row+10)) + skip_points
     print(file_path)
     df = pd.read_csv(file_path, sep='\t', decimal=config[file_path]['decimal_separator'], skiprows=lambda x: x in skiprows_list)
-        
+
     # Plot and show our data
     potential=df['Ewe/V']
     current=df['<I>/mA']
+    
+    idx = np.ones(len(current), dtype=bool)
+
+    if not config[file_path].get('outliers_indexes'):
+        #run twice, important to reverse it for going backwards!
+        outliers_indexes_current = find_outliers(current)
+        outliers_indexes_diffcurrent = find_outliers(np.diff(current))
+        outliers_indexes_diffpotential = find_outliers(np.diff(potential))
+        outliers_indexes = outliers_indexes_current + outliers_indexes_diffcurrent + outliers_indexes_diffpotential
+        print(outliers_indexes)
+        print(len(current))
+        for i in outliers_indexes:
+            idx[i] = False
+            #del potential[i]
+            #del current[i]
+        print(idx)
+        current = current[idx]
+        potential = potential[idx]
+        print(len(current))
+
+        #outliers_indexes2 = find_outliers(np.diff(current))
+        #print(outliers_indexes2)
+        #outliers_indexes2.reverse()
+        #for i in outliers_indexes2:
+        #    print("--")
+        #    print(i)
+        #    print(len(current))
+        #    print(current.iloc[i])
+
+#            del potential[i]
+ #           del current[i]
+
+    else:        
+        for i in jsonloads(config[file_path]['outliers_indexes']):
+            idx[i] = False
+            #del potential[i]
+            #del current[i]
+        current = current.iloc(idx)
+        potential = potential.iloc(idx)
+    
     resistance = float(config[file_path]['resistance'])*float(config['DEFAULT']['r_correct'])
     x=potential  - (resistance*current/1000) + float(config[file_path]['reference_new']) + float(config[file_path]['reference_original'])
-    y=current/float(config[file_path]['surface'])
+    if config['DEFAULT']['normalize_surface'] == "True":
+        y=current/float(config[file_path]['surface'])
+    else:
+        y=current
 
     ax.plot(x, y, linewidth=3, color=colors(int(config[file_path]['color_index'])), label=config[file_path]['label_string'])#alpha=0.8)
     if not axis_limits_preset:
@@ -206,8 +281,14 @@ if float(config['DEFAULT']['r_correct']):
 else:
     x_label = x_label + ' uncorrected'
 
-ax.set_xlabel(x_label, labelpad=10) 
-ax.set_ylabel('Current [mA/cm$^2$]', labelpad=10)
+ax.set_xlabel(x_label, labelpad=10)
+
+if config['DEFAULT']['normalize_surface'] == "True":
+    y_label = 'Current density [mA/cm$^2$]'
+else:
+    y_label = 'Current [mA]'
+    
+ax.set_ylabel(y_label, labelpad=5)
 
 if not axis_limits_preset:
     config['DEFAULT']['xmin'] = str(xmin-0.02*(xmax-xmin))
@@ -215,9 +296,11 @@ if not axis_limits_preset:
     config['DEFAULT']['ymin'] = str(ymin-0.05*(ymax-ymin))
     config['DEFAULT']['ymax'] = str(ymax+0.05*(ymax-ymin))
 
-with open(files_paths[0] + '.ini', 'w') as configfile:
+config_file_path = files_paths[0] + '.ini'
+with open(config_file_path, 'w') as configfile:
     config.write(configfile)
     configfile.close()
+    print("CONFIUGRATION SAVED IN " + config_file_path)
 
 ax.set_xlim(float(config['DEFAULT'].get('xmin')),float(config['DEFAULT'].get('xmax')))
 ax.set_ylim(float(config['DEFAULT'].get('ymin')),float(config['DEFAULT'].get('ymax')))
@@ -225,7 +308,11 @@ ax.set_ylim(float(config['DEFAULT'].get('ymin')),float(config['DEFAULT'].get('ym
 handles, labels = ax.get_legend_handles_labels()
 ax.legend(handles, labels)
 
-filename = os.path.basename(os.path.dirname(files_paths[0]))+'-LSV'
+if config_file:
+    filename = os.path.basename(os.path.splitext(config_file)[0])+'-LSV'
+else:
+    filename = os.path.basename(os.path.dirname(files_paths[0]))+'-LSV'
+    
 plt.savefig(os.path.join(os.path.dirname(files_paths[0]),filename+'.png'),bbox_inches='tight', dpi=300)
 try:
     plt.savefig(os.path.join(os.path.dirname(files_paths[0]),filename+'.pdf'),bbox_inches='tight')
