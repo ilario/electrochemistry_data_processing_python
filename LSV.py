@@ -56,7 +56,7 @@ def analyse_file(file_path):
             # remove lines with mode 3 which is open circuit, which typically happens when the safety limit is passed
             if line[0] == '3':
                 skip_points.append(i)
-            #if more than one, take the last loop
+            #if more than one, take the last loop. The "zero" is the first data row
             if line[0:4] == 'Loop':
                 first_data_row = int(str.split(line)[5])
             if not reference_found:
@@ -94,7 +94,7 @@ def find_outliers(data):
     # this should be done locally, as the mean will vary locally...
     data_std = np.std(data)
     data_mean = np.mean(data)
-    cut_off = data_std * 3#3 would be the common value here
+    cut_off = data_std * 15#3 would be the common value here
     
     lower_limit = data_mean - cut_off 
     upper_limit = data_mean + cut_off
@@ -106,7 +106,7 @@ def find_outliers(data):
 
 
 # Edit the font, font size, and axes width
-plt.rcParams['font.size'] = 14
+plt.rcParams['font.size'] = 11
 plt.rcParams['axes.linewidth'] = 2
 
 config = configparser.ConfigParser()
@@ -115,6 +115,9 @@ if len(sys.argv) > 1:
     #with open(sys.argv[1], 'r') as batch_f:
     config_file = sys.argv[1]
 else:
+    # Create interface, hide main window, ask for file selection
+    root = tk.Tk()
+    root.withdraw()
     config_file = askopenfilename(filetypes=[("EC scripts configuration", ".ini")],title='Choose the configuration file or skip')
 
 files_paths= []
@@ -134,11 +137,6 @@ else:
 if not len(files_paths):
     sys.exit()
     
-# Create interface, hide main window, ask for file selection
-root = tk.Tk()
-root.withdraw()
-
-#if not 'files_paths' in locals():
 
 
 # Generate the full colors from the 'Dark2' ColorBrewer colormap
@@ -157,9 +155,19 @@ if not config['DEFAULT'].get('normalize_surface'):
     config['DEFAULT']['normalize_surface'] = str(messagebox.askyesno('Normalize current over surface','Do you want to plot the current over surface?'))
 # Create figure and add axes object
 #fig = plt.figure(figsize=(3.5, 3.5))#one column
-fig = plt.figure(figsize=(7.2, 4.5))#full width
+if not config['DEFAULT'].get('plot_tafel'):
+    config['DEFAULT']['plot_tafel'] = str(messagebox.askyesno('Tafel plot','Do you want to plot also the Tafel plot?'))
 
-ax = fig.add_axes([0, 0, 1, 1])
+if config['DEFAULT']['plot_tafel'] == 'True'
+    fig = plt.figure(figsize=(7.2, 9))#two full width
+else:
+    fig = plt.figure(figsize=(7.2, 4.5))#full width
+
+if config['DEFAULT']['plot_tafel'] == 'True'
+    ax = fig.add_subplot(2, 1, 1)
+    ax2 = fig.add_subplot(2, 1, 2)
+else:
+    ax = fig.add_axes([0, 0, 1, 1])
 xmin=1000
 xmax=-1000
 ymin=1000
@@ -196,6 +204,7 @@ for j,file_path in enumerate(files_paths):
         config[file_path]['resistance'] = str(simpledialog.askfloat('Set resistance for iR correction','Resistance for iR correction of '+file_name, initialvalue=find_ci_mean_min(dir_name, file_name)))
         config[file_path]['reference_new'] = str(simpledialog.askfloat('Set wanted reference potential','Wanted potential reference for '+label_string_nosub, initialvalue=float(config[file_path].get('reference_new') or config[file_path]['reference_original'])))
         config[file_path]['color_index'] = str(simpledialog.askinteger('Set index of color','Color index for '+label_string_nosub, initialvalue=j))
+        config[file_path]['skip_points'] = str(skip_points)
     if not config[file_path]['resistance']:
         print("RESISTANCE NOT CORRECTED!")
     
@@ -204,8 +213,9 @@ for j,file_path in enumerate(files_paths):
 for j,file_path in enumerate(files_paths):
     first_long_row = int(config[file_path]['first_long_row'])
     first_data_row = int(config[file_path]['first_data_row'])
-   # skip also a few of the first points, as they are usually just transients
-    skiprows_list = list(range(first_long_row)) + list(range(first_long_row+1,first_data_row+10)) + skip_points
+    skip_points = jsonloads(config[file_path]['skip_points']) if config[file_path].get('skip_points') else []
+    skiprows_list = list(range(first_long_row)) + list(range(first_long_row+1,first_long_row+first_data_row)) + skip_points
+        
     print(file_path)
     df = pd.read_csv(file_path, sep='\t', decimal=config[file_path]['decimal_separator'], skiprows=lambda x: x in skiprows_list)
 
@@ -213,36 +223,26 @@ for j,file_path in enumerate(files_paths):
     potential=df['Ewe/V']
     current=df['<I>/mA']
     
-    idx = np.ones(len(current), dtype=bool)
+
 
     if not config[file_path].get('outliers_indexes'):
-        #run twice, important to reverse it for going backwards!
-        outliers_indexes_current = find_outliers(current)
-        outliers_indexes_diffcurrent = find_outliers(np.diff(current))
-        outliers_indexes_diffpotential = find_outliers(np.diff(potential))
-        outliers_indexes = outliers_indexes_current + outliers_indexes_diffcurrent + outliers_indexes_diffpotential
-        print(outliers_indexes)
-        print(len(current))
-        for i in outliers_indexes:
-            idx[i] = False
-            #del potential[i]
-            #del current[i]
-        print(idx)
-        current = current[idx]
-        potential = potential[idx]
-        print(len(current))
-
-        #outliers_indexes2 = find_outliers(np.diff(current))
-        #print(outliers_indexes2)
-        #outliers_indexes2.reverse()
-        #for i in outliers_indexes2:
-        #    print("--")
-        #    print(i)
-        #    print(len(current))
-        #    print(current.iloc[i])
-
-#            del potential[i]
- #           del current[i]
+        while True:
+            idx = np.ones(len(current), dtype=bool)
+            outliers_indexes_current = find_outliers(current)
+            outliers_indexes_diffcurrent = find_outliers(np.diff(current))
+            outliers_indexes_diffpotential = find_outliers(np.diff(potential))
+            outliers_indexes = outliers_indexes_current + outliers_indexes_diffcurrent + outliers_indexes_diffpotential
+            if not outliers_indexes:
+                break
+            #convert to set for unifying duplicates
+            outliers_indexes = set(outliers_indexes)
+            print('Removing outliers: ' + str(outliers_indexes))
+            for i in outliers_indexes:
+                idx[i] = False
+            # skip also a few of the tail points which could be transients due to touching the compliance and stopping the measurement
+            idx[-1] = False; #idx[-5:-1] = [False]*4;
+            current = current[idx]
+            potential = potential[idx]
 
     else:        
         for i in jsonloads(config[file_path]['outliers_indexes']):
@@ -258,8 +258,11 @@ for j,file_path in enumerate(files_paths):
         y=current/float(config[file_path]['surface'])
     else:
         y=current
-
+    plt.subplot(2, 1, 1)
     ax.plot(x, y, linewidth=3, color=colors(int(config[file_path]['color_index'])), label=config[file_path]['label_string'])#alpha=0.8)
+    plt.subplot(2, 1, 2)
+    ax2.plot(y,x, linewidth=3, color=colors(int(config[file_path]['color_index'])), label=config[file_path]['label_string'])#alpha=0.8)
+    ax2.set_xscale('log')
     if not axis_limits_preset:
         xmin = x.min() if x.min() < xmin else xmin
         xmax = x.max() if x.max() > xmax else xmax
@@ -270,8 +273,12 @@ ax.xaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', top='
 ax.xaxis.set_tick_params(which='minor', size=4, width=1, direction='in', top='on')
 ax.yaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', right='on')
 ax.yaxis.set_tick_params(which='minor', size=4, width=1, direction='in', right='on')
+ax2.xaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', top='on')
+ax2.xaxis.set_tick_params(which='minor', size=4, width=1, direction='in', top='on')
+ax2.yaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', right='on')
+ax2.yaxis.set_tick_params(which='minor', size=4, width=1, direction='in', right='on')
 
-x_label = 'E_{WE} [V]'
+x_label = '$E_{WE}$ [V]'
 # Add the x and y-axis labels
 if config['DEFAULT'].get('reference_string'):
    # if isinstance(config['DEFAULT'].get('reference_string'),str):
@@ -281,7 +288,8 @@ if float(config['DEFAULT']['r_correct']):
 else:
     x_label = x_label + ' uncorrected'
 
-ax.set_xlabel(x_label, labelpad=10)
+ax.set_xlabel(x_label, labelpad=5)
+ax2.set_ylabel(x_label, labelpad=5)
 
 if config['DEFAULT']['normalize_surface'] == "True":
     y_label = 'Current density [mA/cm$^2$]'
@@ -289,6 +297,8 @@ else:
     y_label = 'Current [mA]'
     
 ax.set_ylabel(y_label, labelpad=5)
+ax2.set_xlabel('Log10 ' + y_label, labelpad=5)
+
 
 if not axis_limits_preset:
     config['DEFAULT']['xmin'] = str(xmin-0.02*(xmax-xmin))
@@ -304,9 +314,12 @@ with open(config_file_path, 'w') as configfile:
 
 ax.set_xlim(float(config['DEFAULT'].get('xmin')),float(config['DEFAULT'].get('xmax')))
 ax.set_ylim(float(config['DEFAULT'].get('ymin')),float(config['DEFAULT'].get('ymax')))
+ax2.set_xlim(float(config['DEFAULT'].get('ymin')),float(config['DEFAULT'].get('ymax')))
+ax2.set_ylim(float(config['DEFAULT'].get('xmin')),float(config['DEFAULT'].get('xmax')))
 
 handles, labels = ax.get_legend_handles_labels()
 ax.legend(handles, labels)
+ax2.legend(handles, labels)
 
 if config_file:
     filename = os.path.basename(os.path.splitext(config_file)[0])+'-LSV'
