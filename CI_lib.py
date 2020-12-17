@@ -49,10 +49,6 @@ def get_resistance(file_path):
     
     for j, i in enumerate(np.nditer(currentStepsIndexes)):
         resistance_original=(potential[i]-potential[i+1])/(current[i]-current[i+1])
-        resistance_original2=(potential[i]-potential[i+2])/(current[i]-current[i+1])
-        print("--------------")
-        print("Standard CI: " + str(resistance_original))
-        print("Standard CI skipping the first point: " + str(resistance_original2))
         resistance_original_arr.append(resistance_original)
         # x should be provided vertical, reshape does this
         if resistance_original > 0:
@@ -84,14 +80,20 @@ def get_resistance(file_path):
     
 #    print(resistance_arr)
 #    print(resistance_original_arr)
-    resistance_mean = sum(resistance_arr)/len(resistance_arr)
+    #resistance_mean = sum(resistance_arr)/len(resistance_arr)
+    resistance_1quartile = np.percentile(resistance_arr,25)
     resistance_original_mean = sum(resistance_original_arr)/len(resistance_original_arr)
-    resistance_std = np.std(resistance_arr)
+    #resistance_std = np.std(resistance_arr)
     resistance_original_std = np.std(resistance_original_arr)
-    overall_mean = (resistance_original_mean/resistance_original_std**2 + resistance_mean/resistance_std**2)/(1/resistance_std**2 + 1/resistance_original_std**2)
+    #overall_mean = (resistance_original_mean/resistance_original_std**2 + resistance_mean/resistance_std**2)/(1/resistance_std**2 + 1/resistance_original_std**2)
+    overall_mean = (resistance_original_mean + resistance_1quartile)/2
     print("--------------")
+    #print("Standard CI would say " + str(resistance_original_mean) + 
+    #      " ohm with STD of " + str(resistance_original_std) + 
+    #      " ohm. Fitting says " + str(resistance_mean) + " ohm with STD of " + 
+    #      str(resistance_std) + " ohm. Returning the weighted average of the two: " + str(overall_mean) + " ohm.")
     print("Standard CI would say " + str(resistance_original_mean) + 
           " ohm with STD of " + str(resistance_original_std) + 
-          " ohm. Fitting says " + str(resistance_mean) + " ohm with STD of " + 
-          str(resistance_std) + " ohm. Returning the weighted average of the two: " + str(overall_mean) + " ohm.")
+          " ohm. Fitting says " + str(resistance_1quartile) +
+          " ohm. Returning the average of the two: " + str(overall_mean) + " ohm.")
     return(overall_mean)
