@@ -57,8 +57,6 @@ def analyse_file(file_path):
             if line[0] == '3':
                 skip_points.append(i)
             #if more than one, take the last loop. The "zero" is the first data row
-            if line[0:4] == 'Loop':
-                first_data_row = int(str.split(line)[5])
             if not reference_found:
                 if line[0:19] == 'Reference electrode':
                     try:
@@ -73,18 +71,38 @@ def analyse_file(file_path):
                 if line[0:22] == 'Electrode surface area':
                     surface_found = True
                     surface = float(line[25:30].replace(',','.'))
-        if not first_data_row:
-            first_data_row = first_long_row
+
         #take the last line and check if the decimal separator is comma or period
         if ',' in lines[i]:
             decimal_separator = ','
         else:
             decimal_separator = '.'
-            
+
     # Close file
     temp_f.close()
-    return first_long_row, skip_points, first_data_row, reference_suggested, reference_original, surface, decimal_separator
-
+    return first_long_row, skip_points, reference_suggested, reference_original, surface, decimal_separator
+            
+def analyse_file_loop_number(file_path, loop_number):
+    first_data_row = 0
+    last_data_row = 0
+    with open(file_path, 'r', encoding='latin-1') as temp_f:
+        lines = temp_f.readlines()
+        rows_count = len(lines)
+        for i, line in enumerate(lines[0:200]):
+            if line[0:4] == 'Loop':
+ #               tmp_first_data_row = int(str.split(line)[5])
+                if loop_number:
+                    print(str.split(line)[1])
+                    if str.split(line)[1] == str(loop_number):
+                        first_data_row = int(str.split(line)[5]) #tmp_first_data_row
+                        last_data_row = int(str.split(line)[7])
+                else:
+                    first_data_row = int(str.split(line)[5])
+#    if not first_data_row:
+#        first_data_row = tmp_first_data_row
+    temp_f.close()
+    return first_data_row, last_data_row, rows_count
+            
 #copied from https://towardsdatascience.com/5-ways-to-detect-outliers-that-every-data-scientist-should-know-python-code-70a54335a623
 def find_outliers(data):
     #define a list to accumlate outliers
@@ -153,17 +171,19 @@ if not config['DEFAULT'].get('r_correct'):
   
 if not config['DEFAULT'].get('normalize_surface'):
     config['DEFAULT']['normalize_surface'] = str(messagebox.askyesno('Normalize current over surface','Do you want to plot the current over surface?'))
+
 # Create figure and add axes object
-#fig = plt.figure(figsize=(3.5, 3.5))#one column
+#base_size_horiz = 3.5 #one column
+base_size_horiz = 7.2 #full width
+base_size_vert = 4.5 #something reasonable
 if not config['DEFAULT'].get('plot_tafel'):
     config['DEFAULT']['plot_tafel'] = str(messagebox.askyesno('Tafel plot','Do you want to plot also the Tafel plot?'))
-
-if config['DEFAULT']['plot_tafel'] == 'True'
-    fig = plt.figure(figsize=(7.2, 9))#two full width
+if config['DEFAULT']['plot_tafel'] == 'True':
+    fig = plt.figure(figsize=(base_size_horiz, base_size_vert*2))#two full width
 else:
-    fig = plt.figure(figsize=(7.2, 4.5))#full width
+    fig = plt.figure(figsize=(base_size_horiz, base_size_vert))
 
-if config['DEFAULT']['plot_tafel'] == 'True'
+if config['DEFAULT']['plot_tafel'] == 'True':
     ax = fig.add_subplot(2, 1, 1)
     ax2 = fig.add_subplot(2, 1, 2)
 else:
@@ -175,7 +195,8 @@ ymax=-1000
 color_index = []
 reference_new = 'unset'
 
-for j,file_path in enumerate(files_paths):
+for j,identifier in enumerate(files_paths):
+    file_path = str.split(identifier)[0]
     file_name = os.path.basename(file_path)
     dir_name = os.path.dirname(file_path)
 
@@ -190,12 +211,13 @@ for j,file_path in enumerate(files_paths):
         config[file_path]['label_string'] = config[file_path].get('label_string') or label_suggested
         config[file_path]['resistance'] = config[file_path].get('resistance') or str(find_ci_mean_min(dir_name, file_name))
     else:
-        first_long_row, skip_points, first_data_row, reference_suggested, reference_original, surface, decimal_separator = analyse_file(file_path)
+        first_long_row, skip_points, reference_suggested, reference_original, surface, decimal_separator = analyse_file(file_path)
         config[file_path] = {}
+        first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, config[file_path].get('loop_number'))
         if not config['DEFAULT'].get('reference_string'):
             config['DEFAULT']['reference_string'] = simpledialog.askstring('Set reference electrode name','Name of the wanted reference potential', initialvalue=reference_suggested)
         config[file_path]['first_long_row'] = str(first_long_row)
-        config[file_path]['first_data_row'] = str(first_data_row)
+        config[file_path]['loop_number'] = str(simpledialog.askinteger('Loop number to plot','Which loop should be plotted, starting from zero, for '+label_string_nosub, initialvalue=0))
         config[file_path]['decimal_separator'] = str(decimal_separator)
         config[file_path]['label_string'] = simpledialog.askstring('Set legend entry','Legend entry for '+file_name, initialvalue=label_suggested)   
         label_string_nosub = config[file_path]['label_string'].replace('$_{','').replace('}$','') 
@@ -210,20 +232,20 @@ for j,file_path in enumerate(files_paths):
     
 
 
-for j,file_path in enumerate(files_paths):
+for j,identifier in enumerate(files_paths):
+    file_path = str.split(identifier)[0]
     first_long_row = int(config[file_path]['first_long_row'])
-    first_data_row = int(config[file_path]['first_data_row'])
+    first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, config[file_path].get('loop_number'))
     skip_points = jsonloads(config[file_path]['skip_points']) if config[file_path].get('skip_points') else []
     skiprows_list = list(range(first_long_row)) + list(range(first_long_row+1,first_long_row+first_data_row)) + skip_points
-        
+    if last_data_row:
+        skiprows_list = skiprows_list + list(range(first_long_row+last_data_row, rows_count))
     print(file_path)
     df = pd.read_csv(file_path, sep='\t', decimal=config[file_path]['decimal_separator'], skiprows=lambda x: x in skiprows_list)
 
     # Plot and show our data
     potential=df['Ewe/V']
     current=df['<I>/mA']
-    
-
 
     if not config[file_path].get('outliers_indexes'):
         while True:
@@ -258,25 +280,21 @@ for j,file_path in enumerate(files_paths):
         y=current/float(config[file_path]['surface'])
     else:
         y=current
-    plt.subplot(2, 1, 1)
-    ax.plot(x, y, linewidth=3, color=colors(int(config[file_path]['color_index'])), label=config[file_path]['label_string'])#alpha=0.8)
-    plt.subplot(2, 1, 2)
-    ax2.plot(y,x, linewidth=3, color=colors(int(config[file_path]['color_index'])), label=config[file_path]['label_string'])#alpha=0.8)
-    ax2.set_xscale('log')
+    if not config[file_path].get('linestyle'):
+        config[file_path]['linestyle'] = 'solid'
+    if config['DEFAULT']['plot_tafel'] == 'True':
+        plt.subplot(2, 1, 2)
+        ax2.plot(y,x, linewidth=3, color=colors(int(config[file_path]['color_index'])), label=config[file_path]['label_string'], linestyle=config[file_path]['linestyle'])#alpha=0.8)
+        ax2.set_xscale('log')
+        plt.subplot(2, 1, 1)
+    ax.plot(x, y, linewidth=3, color=colors(int(config[file_path]['color_index'])), label=config[file_path]['label_string'], linestyle=config[file_path]['linestyle'])#alpha=0.8)
     if not axis_limits_preset:
         xmin = x.min() if x.min() < xmin else xmin
         xmax = x.max() if x.max() > xmax else xmax
         ymin = y.min() if y.min() < ymin else ymin
         ymax = y.max() if y.max() > ymax else ymax
     
-ax.xaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', top='on')
-ax.xaxis.set_tick_params(which='minor', size=4, width=1, direction='in', top='on')
-ax.yaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', right='on')
-ax.yaxis.set_tick_params(which='minor', size=4, width=1, direction='in', right='on')
-ax2.xaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', top='on')
-ax2.xaxis.set_tick_params(which='minor', size=4, width=1, direction='in', top='on')
-ax2.yaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', right='on')
-ax2.yaxis.set_tick_params(which='minor', size=4, width=1, direction='in', right='on')
+
 
 x_label = '$E_{WE}$ [V]'
 # Add the x and y-axis labels
@@ -288,17 +306,10 @@ if float(config['DEFAULT']['r_correct']):
 else:
     x_label = x_label + ' uncorrected'
 
-ax.set_xlabel(x_label, labelpad=5)
-ax2.set_ylabel(x_label, labelpad=5)
-
 if config['DEFAULT']['normalize_surface'] == "True":
     y_label = 'Current density [mA/cm$^2$]'
 else:
     y_label = 'Current [mA]'
-    
-ax.set_ylabel(y_label, labelpad=5)
-ax2.set_xlabel('Log10 ' + y_label, labelpad=5)
-
 
 if not axis_limits_preset:
     config['DEFAULT']['xmin'] = str(xmin-0.02*(xmax-xmin))
@@ -311,15 +322,31 @@ with open(config_file_path, 'w') as configfile:
     config.write(configfile)
     configfile.close()
     print("CONFIUGRATION SAVED IN " + config_file_path)
+    
+ax.set_xlabel(x_label, labelpad=5)
+ax.set_ylabel(y_label, labelpad=5)
 
 ax.set_xlim(float(config['DEFAULT'].get('xmin')),float(config['DEFAULT'].get('xmax')))
 ax.set_ylim(float(config['DEFAULT'].get('ymin')),float(config['DEFAULT'].get('ymax')))
-ax2.set_xlim(float(config['DEFAULT'].get('ymin')),float(config['DEFAULT'].get('ymax')))
-ax2.set_ylim(float(config['DEFAULT'].get('xmin')),float(config['DEFAULT'].get('xmax')))
+
+ax.xaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', top='on')
+ax.xaxis.set_tick_params(which='minor', size=4, width=1, direction='in', top='on')
+ax.yaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', right='on')
+ax.yaxis.set_tick_params(which='minor', size=4, width=1, direction='in', right='on')
 
 handles, labels = ax.get_legend_handles_labels()
 ax.legend(handles, labels)
-ax2.legend(handles, labels)
+
+if config['DEFAULT']['plot_tafel'] == 'True':
+    ax2.set_xlabel('$Log_{10}$' + y_label, labelpad=5)
+    ax2.set_ylabel(x_label, labelpad=5)
+    ax2.set_xlim(float(config['DEFAULT'].get('ymin')),float(config['DEFAULT'].get('ymax')))
+    ax2.set_ylim(float(config['DEFAULT'].get('xmin')),float(config['DEFAULT'].get('xmax')))
+    ax2.xaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', top='on')
+    ax2.xaxis.set_tick_params(which='minor', size=4, width=1, direction='in', top='on')
+    ax2.yaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', right='on')
+    ax2.yaxis.set_tick_params(which='minor', size=4, width=1, direction='in', right='on')
+    ax2.legend(handles, labels)
 
 if config_file:
     filename = os.path.basename(os.path.splitext(config_file)[0])+'-LSV'
