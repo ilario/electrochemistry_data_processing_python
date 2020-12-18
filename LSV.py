@@ -208,46 +208,46 @@ for j,identifier in enumerate(files_paths):
     label_suggested = re.sub(r'([a-zA-Z])(\d+)', '\g<1>$_{\g<2>}$', label_suggested)
     
     if automated:
-        config[file_path]['label_string'] = config[file_path].get('label_string') or label_suggested
-        config[file_path]['resistance'] = config[file_path].get('resistance') or str(find_ci_mean_min(dir_name, file_name))
+        config[identifier]['label_string'] = config[identifier].get('label_string') or label_suggested
+        config[identifier]['resistance'] = config[identifier].get('resistance') or str(find_ci_mean_min(dir_name, file_name))
     else:
         first_long_row, skip_points, reference_suggested, reference_original, surface, decimal_separator = analyse_file(file_path)
-        config[file_path] = {}
-        first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, config[file_path].get('loop_number'))
+        config[identifier] = {}
+        first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, config[identifier].get('loop_number'))
         if not config['DEFAULT'].get('reference_string'):
             config['DEFAULT']['reference_string'] = simpledialog.askstring('Set reference electrode name','Name of the wanted reference potential', initialvalue=reference_suggested)
-        config[file_path]['first_long_row'] = str(first_long_row)
-        config[file_path]['loop_number'] = str(simpledialog.askinteger('Loop number to plot','Which loop should be plotted, starting from zero, for '+label_string_nosub, initialvalue=0))
-        config[file_path]['decimal_separator'] = str(decimal_separator)
-        config[file_path]['label_string'] = simpledialog.askstring('Set legend entry','Legend entry for '+file_name, initialvalue=label_suggested)   
-        label_string_nosub = config[file_path]['label_string'].replace('$_{','').replace('}$','') 
-        config[file_path]['surface'] = str(simpledialog.askfloat('Set working electrode surface area','Electrode surface area in cm2 for '+file_name, initialvalue=surface))
-        config[file_path]['reference_original'] = str(simpledialog.askfloat('Set reference electrode potential','Potential of employed reference electrode for '+file_name, initialvalue=reference_original))
-        config[file_path]['resistance'] = str(simpledialog.askfloat('Set resistance for iR correction','Resistance for iR correction of '+file_name, initialvalue=find_ci_mean_min(dir_name, file_name)))
-        config[file_path]['reference_new'] = str(simpledialog.askfloat('Set wanted reference potential','Wanted potential reference for '+label_string_nosub, initialvalue=float(config[file_path].get('reference_new') or config[file_path]['reference_original'])))
-        config[file_path]['color_index'] = str(simpledialog.askinteger('Set index of color','Color index for '+label_string_nosub, initialvalue=j))
-        config[file_path]['skip_points'] = str(skip_points)
-    if not config[file_path]['resistance']:
+        config[identifier]['first_long_row'] = str(first_long_row)
+        config[identifier]['loop_number'] = str(simpledialog.askinteger('Loop number to plot','Which loop should be plotted, starting from zero, for '+label_string_nosub, initialvalue=0))
+        config[identifier]['decimal_separator'] = str(decimal_separator)
+        config[identifier]['label_string'] = simpledialog.askstring('Set legend entry','Legend entry for '+file_name, initialvalue=label_suggested)   
+        label_string_nosub = config[identifier]['label_string'].replace('$_{','').replace('}$','') 
+        config[identifier]['surface'] = str(simpledialog.askfloat('Set working electrode surface area','Electrode surface area in cm2 for '+file_name, initialvalue=surface))
+        config[identifier]['reference_original'] = str(simpledialog.askfloat('Set reference electrode potential','Potential of employed reference electrode for '+file_name, initialvalue=reference_original))
+        config[identifier]['resistance'] = str(simpledialog.askfloat('Set resistance for iR correction','Resistance for iR correction of '+file_name, initialvalue=find_ci_mean_min(dir_name, file_name)))
+        config[identifier]['reference_new'] = str(simpledialog.askfloat('Set wanted reference potential','Wanted potential reference for '+label_string_nosub, initialvalue=float(config[identifier].get('reference_new') or config[identifier]['reference_original'])))
+        config[identifier]['color_index'] = str(simpledialog.askinteger('Set index of color','Color index for '+label_string_nosub, initialvalue=j))
+        config[identifier]['skip_points'] = str(skip_points)
+    if not config[identifier]['resistance']:
         print("RESISTANCE NOT CORRECTED!")
     
 
 
 for j,identifier in enumerate(files_paths):
     file_path = str.split(identifier)[0]
-    first_long_row = int(config[file_path]['first_long_row'])
-    first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, config[file_path].get('loop_number'))
-    skip_points = jsonloads(config[file_path]['skip_points']) if config[file_path].get('skip_points') else []
+    first_long_row = int(config[identifier]['first_long_row'])
+    first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, config[identifier].get('loop_number'))
+    skip_points = jsonloads(config[identifier]['skip_points']) if config[identifier].get('skip_points') else []
     skiprows_list = list(range(first_long_row)) + list(range(first_long_row+1,first_long_row+first_data_row)) + skip_points
     if last_data_row:
         skiprows_list = skiprows_list + list(range(first_long_row+last_data_row, rows_count))
     print(file_path)
-    df = pd.read_csv(file_path, sep='\t', decimal=config[file_path]['decimal_separator'], skiprows=lambda x: x in skiprows_list)
+    df = pd.read_csv(file_path, sep='\t', decimal=config[identifier]['decimal_separator'], skiprows=lambda x: x in skiprows_list)
 
     # Plot and show our data
     potential=df['Ewe/V']
     current=df['<I>/mA']
 
-    if not config[file_path].get('outliers_indexes'):
+    if not config[identifier].get('outliers_indexes'):
         while True:
             idx = np.ones(len(current), dtype=bool)
             outliers_indexes_current = find_outliers(current)
@@ -267,27 +267,27 @@ for j,identifier in enumerate(files_paths):
             potential = potential[idx]
 
     else:        
-        for i in jsonloads(config[file_path]['outliers_indexes']):
+        for i in jsonloads(config[identifier]['outliers_indexes']):
             idx[i] = False
             #del potential[i]
             #del current[i]
         current = current.iloc(idx)
         potential = potential.iloc(idx)
     
-    resistance = float(config[file_path]['resistance'])*float(config['DEFAULT']['r_correct'])
-    x=potential  - (resistance*current/1000) + float(config[file_path]['reference_new']) + float(config[file_path]['reference_original'])
+    resistance = float(config[identifier]['resistance'])*float(config['DEFAULT']['r_correct'])
+    x=potential  - (resistance*current/1000) + float(config[identifier]['reference_new']) + float(config[identifier]['reference_original'])
     if config['DEFAULT']['normalize_surface'] == "True":
-        y=current/float(config[file_path]['surface'])
+        y=current/float(config[identifier]['surface'])
     else:
         y=current
-    if not config[file_path].get('linestyle'):
-        config[file_path]['linestyle'] = 'solid'
+    if not config[identifier].get('linestyle'):
+        config[identifier]['linestyle'] = 'solid'
     if config['DEFAULT']['plot_tafel'] == 'True':
         plt.subplot(2, 1, 2)
-        ax2.plot(y,x, linewidth=3, color=colors(int(config[file_path]['color_index'])), label=config[file_path]['label_string'], linestyle=config[file_path]['linestyle'])#alpha=0.8)
+        ax2.plot(y,x, linewidth=3, color=colors(int(config[identifier]['color_index'])), label=config[identifier]['label_string'], linestyle=config[identifier]['linestyle'])#alpha=0.8)
         ax2.set_xscale('log')
         plt.subplot(2, 1, 1)
-    ax.plot(x, y, linewidth=3, color=colors(int(config[file_path]['color_index'])), label=config[file_path]['label_string'], linestyle=config[file_path]['linestyle'])#alpha=0.8)
+    ax.plot(x, y, linewidth=3, color=colors(int(config[identifier]['color_index'])), label=config[identifier]['label_string'], linestyle=config[identifier]['linestyle'])#alpha=0.8)
     if not axis_limits_preset:
         xmin = x.min() if x.min() < xmin else xmin
         xmax = x.max() if x.max() > xmax else xmax
