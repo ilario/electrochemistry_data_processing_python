@@ -19,6 +19,7 @@ import CI_lib
 
 def find_ci_mean_min(dir_name, file_name):
     file_path_CI_scheme_1 = re.sub(r'_\d\d_LSV_C\d\d.mpt$', '_', file_name)
+    file_path_CI_scheme_1 = re.sub(r'_\d\d_CV_C\d\d.mpt$', '_', file_path_CI_scheme_1)
     file_path_CI_scheme_2 = re.sub(r'.*_\d\d_LSV_C(\d\d).mpt$', '_C\g<1>.mpt', file_name)
     file_path_CI_scheme_regex = re.escape(file_path_CI_scheme_1) + '\\d\\d_CI' + re.escape(file_path_CI_scheme_2)
     files_in_dir = os.listdir(dir_name)
@@ -37,25 +38,27 @@ def analyse_file(file_path):
     # Loop the data lines to find the row where the data starts, which is when the number of tabulations stops increasing
     reference_original = 0
     reference_suggested = ''
-    column_count_prev = 0
-    first_long_row = 0
-    skip_points = []
+    #column_count_prev = 0
+    #first_long_row = 0
+   # skip_points = []
     reference_found = False
+    surface = 0
     surface_found = False
+    repetitions = 0
+    cycle_number_column = 0
     with open(file_path, 'r', encoding='latin-1') as temp_f:
         lines = temp_f.readlines()
+        first_long_row = int(str.split(lines[1])[-1]) - 1
         for i, line in enumerate(lines[0:200]):
             # Count the column count for the current line
-            column_count = len(line.split('\t')) + 1
-    
+            #column_count = len(line.split('\t')) + 1
             # Set the new most column count
-            first_long_row = i if column_count > column_count_prev else first_long_row
-            
-            column_count_prev = column_count
+            #first_long_row = i if column_count > column_count_prev else first_long_row
+            #column_count_prev = column_count
             
             # remove lines with mode 3 which is open circuit, which typically happens when the safety limit is passed
-            if line[0] == '3':
-                skip_points.append(i)
+            #if line[0] == '3':
+             #   skip_points.append(i)
             #if more than one, take the last loop. The "zero" is the first data row
             if not reference_found:
                 if line[0:19] == 'Reference electrode':
@@ -66,12 +69,17 @@ def analyse_file(file_path):
                         reference_found = True
                     except AttributeError:
                         None
-
             if not surface_found:
                 if line[0:22] == 'Electrode surface area':
                     surface_found = True
                     surface = float(line[25:30].replace(',','.'))
-
+            if line[0:15] == 'Number of loops':
+                repetitions = int(str.split(line)[-1]) - 1
+            cycle_number_column_position = line.find("cycle number")
+            if not cycle_number_column_position == -1:
+                cycle_number_column = line.count("\t", 0, cycle_number_column_position)
+        if not repetitions and cycle_number_column:
+            repetitions = int(float(str.split(lines[-1])[cycle_number_column])) - 1
         #take the last line and check if the decimal separator is comma or period
         if ',' in lines[i]:
             decimal_separator = ','
@@ -80,26 +88,20 @@ def analyse_file(file_path):
 
     # Close file
     temp_f.close()
-    return first_long_row, skip_points, reference_suggested, reference_original, surface, decimal_separator
-            
+    return first_long_row, reference_suggested, reference_original, surface, decimal_separator, repetitions
+
 def analyse_file_loop_number(file_path, loop_number):
-    first_data_row = 0
-    last_data_row = 0
+    first_data_row = False
+    last_data_row = False
     with open(file_path, 'r', encoding='latin-1') as temp_f:
         lines = temp_f.readlines()
         rows_count = len(lines)
         for i, line in enumerate(lines[0:200]):
             if line[0:4] == 'Loop':
- #               tmp_first_data_row = int(str.split(line)[5])
-                if loop_number:
-                    print(str.split(line)[1])
-                    if str.split(line)[1] == str(loop_number):
-                        first_data_row = int(str.split(line)[5]) #tmp_first_data_row
-                        last_data_row = int(str.split(line)[7])
-                else:
-                    first_data_row = int(str.split(line)[5])
-#    if not first_data_row:
-#        first_data_row = tmp_first_data_row
+#               tmp_first_data_row = int(str.split(line)[5])
+                if str.split(line)[1] == str(loop_number):
+                    first_data_row = int(str.split(line)[5]) #tmp_first_data_row
+                    last_data_row = int(str.split(line)[7])            
     temp_f.close()
     return first_data_row, last_data_row, rows_count
             
@@ -193,7 +195,7 @@ xmax=-1000
 ymin=1000
 ymax=-1000
 color_index = []
-reference_new = 'unset'
+prevReferenceNew = False
 
 for j,identifier in enumerate(files_paths):
     file_path = str.split(identifier)[0]
@@ -211,38 +213,46 @@ for j,identifier in enumerate(files_paths):
         config[identifier]['label_string'] = config[identifier].get('label_string') or label_suggested
         config[identifier]['resistance'] = config[identifier].get('resistance') or str(find_ci_mean_min(dir_name, file_name))
     else:
-        first_long_row, skip_points, reference_suggested, reference_original, surface, decimal_separator = analyse_file(file_path)
+        first_long_row, reference_suggested, reference_original, surface, decimal_separator, repetitions = analyse_file(file_path)
         config[identifier] = {}
-        first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, config[identifier].get('loop_number'))
+        #first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, config[identifier].get('loop_number'))
         if not config['DEFAULT'].get('reference_string'):
             config['DEFAULT']['reference_string'] = simpledialog.askstring('Set reference electrode name','Name of the wanted reference potential', initialvalue=reference_suggested)
         config[identifier]['first_long_row'] = str(first_long_row)
-        config[identifier]['loop_number'] = str(simpledialog.askinteger('Loop number to plot','Which loop should be plotted, starting from zero, for '+label_string_nosub, initialvalue=0))
         config[identifier]['decimal_separator'] = str(decimal_separator)
         config[identifier]['label_string'] = simpledialog.askstring('Set legend entry','Legend entry for '+file_name, initialvalue=label_suggested)   
-        label_string_nosub = config[identifier]['label_string'].replace('$_{','').replace('}$','') 
-        config[identifier]['surface'] = str(simpledialog.askfloat('Set working electrode surface area','Electrode surface area in cm2 for '+file_name, initialvalue=surface))
+        label_string_nosub = config[identifier]['label_string'].replace('$_{','').replace('}$','')
+        if repetitions:
+            config[identifier]['loop_number'] = str(simpledialog.askinteger('Loop number to plot','Which loop should be plotted, starting from zero up to ' + str(repetitions) + ', for '+label_string_nosub+' Beware that this is cycle number MINUS ONE.', initialvalue=repetitions))
+        else:
+            config[identifier]['loop_number'] = '0'
+        if config['DEFAULT']['normalize_surface'] == 'True':
+            config[identifier]['surface'] = str(simpledialog.askfloat('Set working electrode surface area','Electrode surface area in cm2 for '+file_name, initialvalue=surface))
         config[identifier]['reference_original'] = str(simpledialog.askfloat('Set reference electrode potential','Potential of employed reference electrode for '+file_name, initialvalue=reference_original))
         config[identifier]['resistance'] = str(simpledialog.askfloat('Set resistance for iR correction','Resistance for iR correction of '+file_name, initialvalue=find_ci_mean_min(dir_name, file_name)))
-        config[identifier]['reference_new'] = str(simpledialog.askfloat('Set wanted reference potential','Wanted potential reference for '+label_string_nosub, initialvalue=float(config[identifier].get('reference_new') or config[identifier]['reference_original'])))
+        config[identifier]['reference_new'] = str(simpledialog.askfloat('Set wanted reference potential','Wanted potential reference for '+label_string_nosub, initialvalue=float(prevReferenceNew or config[identifier]['reference_original'])))
+        prevReferenceNew = config[identifier]['reference_new']
         config[identifier]['color_index'] = str(simpledialog.askinteger('Set index of color','Color index for '+label_string_nosub, initialvalue=j))
-        config[identifier]['skip_points'] = str(skip_points)
+        #config[identifier]['skip_points'] = str(skip_points)
     if not config[identifier]['resistance']:
         print("RESISTANCE NOT CORRECTED!")
     
-
-
 for j,identifier in enumerate(files_paths):
     file_path = str.split(identifier)[0]
     first_long_row = int(config[identifier]['first_long_row'])
-    first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, config[identifier].get('loop_number'))
-    skip_points = jsonloads(config[identifier]['skip_points']) if config[identifier].get('skip_points') else []
-    skiprows_list = list(range(first_long_row)) + list(range(first_long_row+1,first_long_row+first_data_row)) + skip_points
-    if last_data_row:
-        skiprows_list = skiprows_list + list(range(first_long_row+last_data_row, rows_count))
+    loop_number = int(config[identifier].get('loop_number') or -1)
+    first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, loop_number)
+    #skip_points = jsonloads(config[identifier]['skip_points']) if config[identifier].get('skip_points') else []
+    skiprows_list = list(range(first_long_row))# + skip_points
+    # False and True are recognized both as int and as bool!
+    if not isinstance(first_data_row, bool) and not isinstance(last_data_row, bool): 
+        skiprows_list = skiprows_list + list(range(first_long_row+1,first_long_row+first_data_row)) + list(range(first_long_row+last_data_row, rows_count))
     print(file_path)
     df = pd.read_csv(file_path, sep='\t', decimal=config[identifier]['decimal_separator'], skiprows=lambda x: x in skiprows_list)
-
+    
+    if not loop_number == -1:
+        df = df[df['cycle number'] == (loop_number + 1)]
+    
     # Plot and show our data
     potential=df['Ewe/V']
     current=df['<I>/mA']
@@ -254,7 +264,8 @@ for j,identifier in enumerate(files_paths):
             outliers_indexes_diffcurrent = find_outliers(np.diff(current))
             outliers_indexes_diffpotential = find_outliers(np.diff(potential))
             outliers_indexes = outliers_indexes_current + outliers_indexes_diffcurrent + outliers_indexes_diffpotential
-            if not outliers_indexes:
+            # for CV there's often just one point being removed, and this goes on forever. Stopping when there's just one point in the outliers list.
+            if not outliers_indexes or len(outliers_indexes) < 2:
                 break
             #convert to set for unifying duplicates
             outliers_indexes = set(outliers_indexes)
@@ -276,7 +287,7 @@ for j,identifier in enumerate(files_paths):
     
     resistance = float(config[identifier]['resistance'])*float(config['DEFAULT']['r_correct'])
     x=potential  - (resistance*current/1000) + float(config[identifier]['reference_new']) + float(config[identifier]['reference_original'])
-    if config['DEFAULT']['normalize_surface'] == "True":
+    if config['DEFAULT']['normalize_surface'] == 'True':
         y=current/float(config[identifier]['surface'])
     else:
         y=current
