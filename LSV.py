@@ -20,7 +20,8 @@ import CI_lib
 def find_ci_mean_min(dir_name, file_name):
     file_path_CI_scheme_1 = re.sub(r'_\d\d_LSV_C\d\d.mpt$', '_', file_name)
     file_path_CI_scheme_1 = re.sub(r'_\d\d_CV_C\d\d.mpt$', '_', file_path_CI_scheme_1)
-    file_path_CI_scheme_2 = re.sub(r'.*_\d\d_LSV_C(\d\d).mpt$', '_C\g<1>.mpt', file_name)
+#    file_path_CI_scheme_2 = re.sub(r'.*_\d\d_LSV_C(\d\d).mpt$', '_C\g<1>.mpt', file_name)
+    file_path_CI_scheme_2 = re.sub(r'.*_C(\d\d).mpt$', '_C\g<1>.mpt', file_name)
     file_path_CI_scheme_regex = re.escape(file_path_CI_scheme_1) + '\\d\\d_CI' + re.escape(file_path_CI_scheme_2)
     files_in_dir = os.listdir(dir_name)
     related_CI = filter(lambda x: re.search(file_path_CI_scheme_regex, x), files_in_dir)
@@ -78,13 +79,16 @@ def analyse_file(file_path):
             cycle_number_column_position = line.find("cycle number")
             if not cycle_number_column_position == -1:
                 cycle_number_column = line.count("\t", 0, cycle_number_column_position)
-        if not repetitions and cycle_number_column:
-            repetitions = int(float(str.split(lines[-1])[cycle_number_column])) - 1
         #take the last line and check if the decimal separator is comma or period
         if ',' in lines[i]:
             decimal_separator = ','
         else:
             decimal_separator = '.'
+        if not repetitions and cycle_number_column:
+            repetitions_string = str.split(lines[-1])[cycle_number_column]
+            if decimal_separator == ',':
+                repetitions_string = repetitions_string.replace(',','.')
+            repetitions = int(float(repetitions_string)) - 1
 
     # Close file
     temp_f.close()
@@ -196,6 +200,7 @@ ymin=1000
 ymax=-1000
 color_index = []
 prevReferenceNew = False
+plt.axhline(y=0, color='lightgray', linestyle='-')
 
 for j,identifier in enumerate(files_paths):
     file_path = str.split(identifier)[0]
@@ -347,6 +352,7 @@ ax.yaxis.set_tick_params(which='minor', size=4, width=1, direction='in', right='
 
 handles, labels = ax.get_legend_handles_labels()
 ax.legend(handles, labels)
+
 
 if config['DEFAULT']['plot_tafel'] == 'True':
     ax2.set_xlabel('$Log_{10}$' + y_label, labelpad=5)
