@@ -118,7 +118,7 @@ def find_outliers(data):
     # this should be done locally, as the mean will vary locally...
     data_std = np.std(data)
     data_mean = np.mean(data)
-    cut_off = data_std * 15#3 would be the common value here
+    cut_off = data_std * 40#3 would be the common value here
     
     lower_limit = data_mean - cut_off 
     upper_limit = data_mean + cut_off
@@ -216,7 +216,8 @@ for j,identifier in enumerate(files_paths):
     
     if automated:
         config[identifier]['label_string'] = config[identifier].get('label_string') or label_suggested
-        config[identifier]['resistance'] = config[identifier].get('resistance') or str(find_ci_mean_min(dir_name, file_name))
+        if not config[identifier]['r_correct'] == '0.0':
+            config[identifier]['resistance'] =  config[identifier].get('resistance') or str(find_ci_mean_min(dir_name, file_name))
     else:
         first_long_row, reference_suggested, reference_original, surface, decimal_separator, repetitions = analyse_file(file_path)
         config[identifier] = {}
@@ -234,12 +235,13 @@ for j,identifier in enumerate(files_paths):
         if config['DEFAULT']['normalize_surface'] == 'True':
             config[identifier]['surface'] = str(simpledialog.askfloat('Set working electrode surface area','Electrode surface area in cm2 for '+file_name, initialvalue=surface))
         config[identifier]['reference_original'] = str(simpledialog.askfloat('Set reference electrode potential','Potential of employed reference electrode for '+file_name, initialvalue=reference_original))
-        config[identifier]['resistance'] = str(simpledialog.askfloat('Set resistance for iR correction','Resistance for iR correction of '+file_name, initialvalue=find_ci_mean_min(dir_name, file_name)))
+        if not config['DEFAULT']['r_correct'] == '0.0':
+            config[identifier]['resistance'] = str(simpledialog.askfloat('Set resistance for iR correction','Resistance for iR correction of '+file_name, initialvalue=find_ci_mean_min(dir_name, file_name)))
         config[identifier]['reference_new'] = str(simpledialog.askfloat('Set wanted reference potential','Wanted potential reference for '+label_string_nosub, initialvalue=float(prevReferenceNew or config[identifier]['reference_original'])))
         prevReferenceNew = config[identifier]['reference_new']
         config[identifier]['color_index'] = str(simpledialog.askinteger('Set index of color','Color index for '+label_string_nosub, initialvalue=j))
         #config[identifier]['skip_points'] = str(skip_points)
-    if not config[identifier]['resistance']:
+    if not config[identifier].get('resistance'):
         print("RESISTANCE NOT CORRECTED!")
     
 for j,identifier in enumerate(files_paths):
@@ -289,9 +291,12 @@ for j,identifier in enumerate(files_paths):
             #del current[i]
         current = current.iloc(idx)
         potential = potential.iloc(idx)
-    
-    resistance = float(config[identifier]['resistance'])*float(config['DEFAULT']['r_correct'])
-    x=potential  - (resistance*current/1000) + float(config[identifier]['reference_new']) + float(config[identifier]['reference_original'])
+    potential_toReference = potential + float(config[identifier]['reference_new']) + float(config[identifier]['reference_original'])
+    if config[identifier].get('resistance'):
+        resistance = float(config[identifier]['resistance'])*float(config['DEFAULT']['r_correct'])
+        x = potential_toReference - (resistance*current/1000)
+    else:
+        x = potential_toReference
     if config['DEFAULT']['normalize_surface'] == 'True':
         y=current/float(config[identifier]['surface'])
     else:
@@ -318,7 +323,7 @@ if config['DEFAULT'].get('reference_string'):
    # if isinstance(config['DEFAULT'].get('reference_string'),str):
     x_label = x_label + ' vs. ' + config['DEFAULT']['reference_string']
 if float(config['DEFAULT']['r_correct']):
-    x_label = x_label + ' corrected'
+    x_label = x_label + ' iR corrected'
 else:
     x_label = x_label + ' uncorrected'
 
