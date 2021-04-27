@@ -257,7 +257,7 @@ for j,identifier in enumerate(files_paths):
     print(file_path)
     df = pd.read_csv(file_path, sep='\t', decimal=config[identifier]['decimal_separator'], skiprows=lambda x: x in skiprows_list)
     
-    if not loop_number == -1:
+    if not loop_number == -1 and 'cycle number' in df.columns:
         df = df[df['cycle number'] == (loop_number + 1)]
     
     # Plot and show our data
