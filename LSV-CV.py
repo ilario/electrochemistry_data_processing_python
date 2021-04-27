@@ -39,9 +39,6 @@ def analyse_file(file_path):
     # Loop the data lines to find the row where the data starts, which is when the number of tabulations stops increasing
     reference_original = 0
     reference_suggested = ''
-    #column_count_prev = 0
-    #first_long_row = 0
-   # skip_points = []
     reference_found = False
     surface = 0
     surface_found = False
@@ -57,9 +54,6 @@ def analyse_file(file_path):
             #first_long_row = i if column_count > column_count_prev else first_long_row
             #column_count_prev = column_count
             
-            # remove lines with mode 3 which is open circuit, which typically happens when the safety limit is passed
-            #if line[0] == '3':
-             #   skip_points.append(i)
             #if more than one, take the last loop. The "zero" is the first data row
             if not reference_found:
                 if line[0:19] == 'Reference electrode':
@@ -127,7 +121,6 @@ def find_outliers(data):
         if outlier_candidate > upper_limit or outlier_candidate < lower_limit:
             outliers_indexes.append(i)
     return outliers_indexes
-
 
 # Edit the font, font size, and axes width
 plt.rcParams['font.size'] = 11
@@ -253,13 +246,16 @@ for j,identifier in enumerate(files_paths):
     skiprows_list = list(range(first_long_row))# + skip_points
     # False and True are recognized both as int and as bool!
     if not isinstance(first_data_row, bool) and not isinstance(last_data_row, bool): 
-        skiprows_list = skiprows_list + list(range(first_long_row+1,first_long_row+first_data_row)) + list(range(first_long_row+last_data_row, rows_count))
+        skiprows_list = skiprows_list + list(range(first_long_row+1,first_long_row+first_data_row+1)) + list(range(first_long_row+last_data_row, rows_count))
     print(file_path)
     df = pd.read_csv(file_path, sep='\t', decimal=config[identifier]['decimal_separator'], skiprows=lambda x: x in skiprows_list)
     
     if not loop_number == -1 and 'cycle number' in df.columns:
         df = df[df['cycle number'] == (loop_number + 1)]
     
+    # remove lines with mode 3 which is open circuit, which typically happens when the safety limit is passed or at the beginning of the measurement
+    df = df[df['mode'] != 3]
+
     # Plot and show our data
     potential=df['Ewe/V']
     current=df['<I>/mA']
