@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 @author: Ilario Gelmetti
@@ -6,37 +7,14 @@
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
+import EC_data_processing_lib as ec
 
-def get_resistance(file_path):    
+def get_resistance(file_path):
     print(file_path)
-    # Loop the data lines to find the row where the data starts, which is when the number of tabulations stops increasing
-    with open(file_path, 'r', encoding='latin-1') as temp_f:
-        column_count_prev = 0
-        first_long_row = 0
-        
-        lines = temp_f.readlines()
-        for i, line in enumerate(lines):
-            # Count the column count for the current line
-            column_count = len(line.split('\t')) + 1
-    
-            # Set the new most column count
-            first_long_row = i if column_count > column_count_prev else first_long_row
-            
-            column_count_prev = column_count
-            
-        #take the last line and check if the decimal separator is comma or period
-        if ',' in lines[i]:
-            decimal_separator = ','
-        else:
-            decimal_separator = '.'
-            
-    # Close file
-    temp_f.close()
-    skiprows_list = []
-    skiprows_list.extend(range(first_long_row-1))
-    
+    first_long_row, reference_suggested, reference_original, surface, decimal_separator, repetitions = ec.analyse_file(file_path)
+    skiprows_list = list(range(first_long_row))
     df = pd.read_csv(file_path, sep='\t', decimal=decimal_separator, skiprows=lambda x: x in skiprows_list)
-        
+            
     # Plot and show our data
     potential=df['Ewe/V']
     current=df['I/mA']/1000
@@ -75,7 +53,7 @@ def get_resistance(file_path):
     #    print("y_pred")
     #    print(y_pred)
         resistance = (potential[i]-y_pred)/(current[i]-current[i+1])
-        print("Fitted CI: " + str(resistance))
+#        print("Fitted CI: " + str(resistance))
         resistance_arr.append(resistance)
     
 #    print(resistance_arr)
