@@ -128,42 +128,51 @@ plt.rcParams['axes.linewidth'] = 2
 
 config = configparser.ConfigParser()
 
-if len(sys.argv) > 1:
-    #with open(sys.argv[1], 'r') as batch_f:
+files_paths = []
+config_file = ""
+if len(sys.argv) == 2:
     config_file = sys.argv[1]
+    automated = True
 else:
+    automated = False
     # Create interface, hide main window, ask for file selection
     root = tk.Tk()
     root.withdraw()
-    config_file = askopenfilename(filetypes=[("EC scripts configuration", ".ini")],title='Choose the configuration file or skip')
+    if len(sys.argv) > 2:
+        for argument in sys.argv[1:]:
+            files_paths.append(os.path.abspath(argument))
+    else:
+        config_file = askopenfilename(filetypes=[("EC scripts configuration", ".ini")],title='Choose the configuration file or skip')
 
-files_paths= []
 if config_file:
-    automated = True
     config.read(config_file)
     files_paths = config.sections()
-else:
-    automated = False
+elif not len(files_paths):
     while True:
         selected_file = askopenfilename(filetypes=[("EC-Lab Text Format", ".mpt")],title='Choose the file to plot')
         if selected_file:
+            print(selected_file)
             files_paths.append(selected_file)
         else:
             break
-        
+
 if not len(files_paths):
     sys.exit()
-    
 
+print(files_paths)
 
 # Generate the full colors from the 'Dark2' ColorBrewer colormap
 config['DEFAULT']['color_scheme'] = config['DEFAULT'].get('color_scheme') or simpledialog.askstring('Set color scheme','Qualitative color schemes: Pastel1, Pastel2, Paired, Accent, Dark2, Set1, Set2, Set3, tab10, tab20, tab20b, tab20c', initialvalue='tab20')
 colors = cm.get_cmap(config['DEFAULT']['color_scheme'])
 
-if config['DEFAULT'].get('xmin') and config['DEFAULT'].get('xmax') and config['DEFAULT'].get('ymin') and config['DEFAULT'].get('ymax'):
-    axis_limits_preset = True
+if config['DEFAULT'].get('xmin') and config['DEFAULT'].get('xmax'):
+    axis_limits_preset_x = True
 else:
-    axis_limits_preset = False
+    axis_limits_preset_x = False
+if config['DEFAULT'].get('ymin') and config['DEFAULT'].get('ymax'):
+    axis_limits_preset_y = True
+else:
+    axis_limits_preset_y = False
 
 if not config['DEFAULT'].get('r_correct'):
     config['DEFAULT']['r_correct'] = str(simpledialog.askfloat('Resistance correction value','1 = full resistance correction, 0 = no resistance correction', initialvalue=1))
@@ -192,6 +201,7 @@ xmax=-1000
 ymin=1000
 ymax=-1000
 color_index = []
+theres_no_CV = True
 prevReferenceNew = False
 plt.axhline(y=0, color='lightgray', linestyle='-')
 
@@ -199,6 +209,8 @@ for j,identifier in enumerate(files_paths):
     file_path = str.split(identifier)[0]
     file_name = os.path.basename(file_path)
     dir_name = os.path.dirname(file_path)
+    if "_CV_" in file_name:
+        theres_no_CV = False
 
     try:
         label_suggested = re.search('-(.+)-.+?_\d\d_LSV', file_name).group(1)
@@ -230,7 +242,7 @@ for j,identifier in enumerate(files_paths):
         config[identifier]['reference_original'] = str(simpledialog.askfloat('Set reference electrode potential','Potential of employed reference electrode for '+file_name, initialvalue=reference_original))
         if not config['DEFAULT']['r_correct'] == '0.0':
             config[identifier]['resistance'] = str(simpledialog.askfloat('Set resistance for iR correction','Resistance for iR correction of '+file_name, initialvalue=find_ci_mean_min(dir_name, file_name)))
-        config[identifier]['reference_new'] = str(simpledialog.askfloat('Set wanted reference potential','Wanted potential reference for '+label_string_nosub, initialvalue=float(prevReferenceNew or config[identifier]['reference_original'])))
+        config[identifier]['reference_new'] = str(simpledialog.askfloat('Set wanted reference potential','Wanted potential reference for '+label_string_nosub, initialvalue=float(prevReferenceNew or -float(config[identifier]['reference_original']))))
         prevReferenceNew = config[identifier]['reference_new']
         config[identifier]['color_index'] = str(simpledialog.askinteger('Set index of color','Color index for '+label_string_nosub, initialvalue=j))
         #config[identifier]['skip_points'] = str(skip_points)
@@ -305,11 +317,14 @@ for j,identifier in enumerate(files_paths):
         ax2.set_xscale('log')
         plt.subplot(2, 1, 1)
     ax.plot(x, y, linewidth=3, color=colors(int(config[identifier]['color_index'])), label=config[identifier]['label_string'], linestyle=config[identifier]['linestyle'])#alpha=0.8)
-    if not axis_limits_preset:
-        xmin = x.min() if x.min() < xmin else xmin
-        xmax = x.max() if x.max() > xmax else xmax
-        ymin = y.min() if y.min() < ymin else ymin
-        ymax = y.max() if y.max() > ymax else ymax
+
+    if theres_no_CV or ("_CV_" in file_path):
+        if not axis_limits_preset_x:
+            xmin = x.min() if x.min() < xmin else xmin
+            xmax = x.max() if x.max() > xmax else xmax
+        if not axis_limits_preset_y:
+            ymin = y.min() if y.min() < ymin else ymin
+            ymax = y.max() if y.max() > ymax else ymax
     
 
 
@@ -328,9 +343,10 @@ if config['DEFAULT']['normalize_surface'] == "True":
 else:
     y_label = 'Current [mA]'
 
-if not axis_limits_preset:
+if not axis_limits_preset_x:
     config['DEFAULT']['xmin'] = str(xmin-0.02*(xmax-xmin))
     config['DEFAULT']['xmax'] = str(xmax+0.02*(xmax-xmin))
+if not axis_limits_preset_y:
     config['DEFAULT']['ymin'] = str(ymin-0.05*(ymax-ymin))
     config['DEFAULT']['ymax'] = str(ymax+0.05*(ymax-ymin))
 
