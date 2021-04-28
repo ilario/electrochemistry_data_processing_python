@@ -317,14 +317,13 @@ for j,identifier in enumerate(files_paths):
         ax2.set_xscale('log')
         plt.subplot(2, 1, 1)
     ax.plot(x, y, linewidth=3, color=colors(int(config[identifier]['color_index'])), label=config[identifier]['label_string'], linestyle=config[identifier]['linestyle'])#alpha=0.8)
+    if not axis_limits_preset_x:
+        xmin = x.min() if x.min() < xmin else xmin
+        xmax = x.max() if x.max() > xmax else xmax
 
-    if theres_no_CV or ("_CV_" in file_path):
-        if not axis_limits_preset_x:
-            xmin = x.min() if x.min() < xmin else xmin
-            xmax = x.max() if x.max() > xmax else xmax
-        if not axis_limits_preset_y:
-            ymin = y.min() if y.min() < ymin else ymin
-            ymax = y.max() if y.max() > ymax else ymax
+    if not axis_limits_preset_y and (theres_no_CV or ("_CV_" in file_path)):
+        ymin = y.min() if y.min() < ymin else ymin
+        ymax = y.max() if y.max() > ymax else ymax
     
 
 
