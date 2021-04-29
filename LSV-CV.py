@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+"""
+@author: Ilario Gelmetti
+"""
 # Import required packages
 import os
 import matplotlib.pyplot as plt
@@ -132,9 +134,7 @@ files_paths = []
 config_file = ""
 if len(sys.argv) == 2:
     config_file = sys.argv[1]
-    automated = True
 else:
-    automated = False
     # Create interface, hide main window, ask for file selection
     root = tk.Tk()
     root.withdraw()
@@ -144,7 +144,9 @@ else:
     else:
         config_file = askopenfilename(filetypes=[("EC scripts configuration", ".ini")],title='Choose the configuration file or skip')
 
+automated = False
 if config_file:
+    automated = True
     config.read(config_file)
     files_paths = config.sections()
 elif not len(files_paths):
@@ -219,6 +221,7 @@ for j,identifier in enumerate(files_paths):
     label_suggested = label_suggested.replace('_', ' ').replace('-', ', ')
     label_suggested = re.sub(r'([a-zA-Z])(\d+)', '\g<1>$_{\g<2>}$', label_suggested)
     
+    print(file_path)
     if automated:
         config[identifier]['label_string'] = config[identifier].get('label_string') or label_suggested
         if not config[identifier]['r_correct'] == '0.0':
