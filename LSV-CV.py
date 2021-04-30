@@ -125,7 +125,7 @@ def find_outliers(data):
     return outliers_indexes
 
 # Edit the font, font size, and axes width
-plt.rcParams['font.size'] = 11
+plt.rcParams['font.size'] = 14
 plt.rcParams['axes.linewidth'] = 2
 
 config = configparser.ConfigParser()
@@ -273,7 +273,7 @@ for j,identifier in enumerate(files_paths):
 
     # Plot and show our data
     potential=df['Ewe/V']
-    current=df['<I>/mA']
+    current=1000*df['<I>/mA']
 
     if not config[identifier].get('outliers_indexes'):
         while True:
@@ -305,7 +305,7 @@ for j,identifier in enumerate(files_paths):
     potential_toReference = potential + float(config[identifier]['reference_new']) + float(config[identifier]['reference_original'])
     if config[identifier].get('resistance'):
         resistance = float(config[identifier]['resistance'])*float(config['DEFAULT']['r_correct'])
-        x = potential_toReference - (resistance*current/1000)
+        x = potential_toReference - (resistance*current/1000000)
     else:
         x = potential_toReference
     if config['DEFAULT']['normalize_surface'] == 'True':
@@ -341,9 +341,9 @@ else:
     x_label = x_label + ' uncorrected'
 
 if config['DEFAULT']['normalize_surface'] == "True":
-    y_label = 'Current density [mA/cm$^2$]'
+    y_label = 'Current density [$\mu$A/cm$^2$]'
 else:
-    y_label = 'Current [mA]'
+    y_label = 'Current [$\mu$A]'
 
 if not axis_limits_preset_x:
     config['DEFAULT']['xmin'] = str(xmin-0.02*(xmax-xmin))
@@ -370,8 +370,8 @@ ax.yaxis.set_tick_params(which='major', size=7, width=1.5, direction='in', right
 ax.yaxis.set_tick_params(which='minor', size=4, width=1, direction='in', right='on')
 
 handles, labels = ax.get_legend_handles_labels()
-ax.legend(handles, labels)
-
+ax.legend(handles, labels, frameon=False)
+plt.title(config['DEFAULT'].get('title'))
 
 if config['DEFAULT']['plot_tafel'] == 'True':
     ax2.set_xlabel('$Log_{10}$' + y_label, labelpad=5)
