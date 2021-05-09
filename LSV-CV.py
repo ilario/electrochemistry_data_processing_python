@@ -137,13 +137,22 @@ if len(sys.argv) == 2:
 else:
     # Create interface, hide main window, ask for file selection
     root = tk.Tk()
-    root.withdraw()
+    #try to take the window to foreground
+    #root.lift()
+    root.focus_force()
+    #root.withdraw()
+
+    #try again, specific for windows OS
+    #root.wm_attributes('-topmost', 1)
+    #root.after_idle(root.attributes,'-topmost',False)
+    
+
     if len(sys.argv) > 2:
         for argument in sys.argv[1:]:
             files_paths.append(os.path.abspath(argument))
     else:
-        config_file = askopenfilename(filetypes=[("EC scripts configuration", ".ini")],title='Choose the configuration file or skip')
-
+        config_file = askopenfilename(parent=root,filetypes=[("EC scripts configuration", ".ini")],title='Choose the configuration file or skip')
+        #root.wm_attributes('-topmost', 0)
 automated = False
 if config_file:
     automated = True
@@ -159,6 +168,7 @@ elif not len(files_paths):
             break
 
 if not len(files_paths):
+    root.withdraw()
     sys.exit()
 
 print(files_paths)
@@ -182,6 +192,23 @@ if not config['DEFAULT'].get('r_correct'):
 if not config['DEFAULT'].get('normalize_surface'):
     config['DEFAULT']['normalize_surface'] = str(messagebox.askyesno('Normalize current over surface','Do you want to plot the current over surface?'))
 
+if not config['DEFAULT'].get('title'):
+    config['DEFAULT']['title'] = simpledialog.askstring('Figure title','Which title should the figure have? Empty is allowed.')
+
+if not config['DEFAULT'].get('current_unit'):
+    config['DEFAULT']['current_unit'] = simpledialog.askstring('Units for the current','Which units should the current have? Allowed values are A, mA, uA, nA.', initialvalue='mA')
+
+current_unit_string_dict = {'A':'A',
+                            'mA':'mA',
+                            'uA':'\muA',
+                            'nA':'nA'}
+current_unit_string = current_unit_string_dict.get(config['DEFAULT']['current_unit'])
+current_unit_factor_dict = {'A':0.001,
+                            'mA':1,
+                            'uA':1000,
+                            'nA':1000000}
+current_unit_factor = current_unit_factor_dict.get(config['DEFAULT']['current_unit'])
+
 # Create figure and add axes object
 #base_size_horiz = 3.5 #one column
 base_size_horiz = 7.2 #full width
@@ -198,17 +225,18 @@ if config['DEFAULT']['plot_tafel'] == 'True':
     ax2 = fig.add_subplot(2, 1, 2)
 else:
     ax = fig.add_axes([0, 0, 1, 1])
-xmin=1000
-xmax=-1000
-ymin=1000
-ymax=-1000
+xmin=1000000
+xmax=-1000000
+ymin=1000000
+ymax=-1000000
 color_index = []
 theres_no_CV = True
 prevReferenceNew = False
 plt.axhline(y=0, color='lightgray', linestyle='-')
 
 for j,identifier in enumerate(files_paths):
-    file_path = str.split(identifier)[0]
+    # in the future, the identifier could be different from the file_path, for example if we want to plot the same file more than once
+    file_path = identifier
     file_name = os.path.basename(file_path)
     dir_name = os.path.dirname(file_path)
     if "_CV_" in file_name:
@@ -253,7 +281,8 @@ for j,identifier in enumerate(files_paths):
         print("RESISTANCE NOT CORRECTED!")
     
 for j,identifier in enumerate(files_paths):
-    file_path = str.split(identifier)[0]
+    # in the future, the identifier could be different from the file_path, for example if we want to plot the same file more than once
+    file_path = identifier
     first_long_row = int(config[identifier]['first_long_row'])
     loop_number = int(config[identifier].get('loop_number') or -1)
     first_data_row, last_data_row, rows_count = analyse_file_loop_number(file_path, loop_number)
@@ -273,7 +302,7 @@ for j,identifier in enumerate(files_paths):
 
     # Plot and show our data
     potential=df['Ewe/V']
-    current=1000*df['<I>/mA']
+    current=current_unit_factor*df['<I>/mA']
 
     if not config[identifier].get('outliers_indexes'):
         while True:
@@ -305,7 +334,7 @@ for j,identifier in enumerate(files_paths):
     potential_toReference = potential + float(config[identifier]['reference_new']) + float(config[identifier]['reference_original'])
     if config[identifier].get('resistance'):
         resistance = float(config[identifier]['resistance'])*float(config['DEFAULT']['r_correct'])
-        x = potential_toReference - (resistance*current/1000000)
+        x = potential_toReference - (resistance*current/(1000*current_unit_factor))
     else:
         x = potential_toReference
     if config['DEFAULT']['normalize_surface'] == 'True':
@@ -330,20 +359,20 @@ for j,identifier in enumerate(files_paths):
     
 
 
-x_label = '$E_{WE}$ [V]'
+x_label = '$E_{WE}$ $[V]$'
 # Add the x and y-axis labels
 if config['DEFAULT'].get('reference_string'):
    # if isinstance(config['DEFAULT'].get('reference_string'),str):
     x_label = x_label + ' vs. ' + config['DEFAULT']['reference_string']
 if float(config['DEFAULT']['r_correct']):
-    x_label = x_label + ' iR corrected'
+    x_label = x_label + ', iR corrected'
 else:
-    x_label = x_label + ' uncorrected'
+    x_label = x_label + ', uncorrected'
 
 if config['DEFAULT']['normalize_surface'] == "True":
-    y_label = 'Current density [$\mu$A/cm$^2$]'
+    y_label = 'Current density $[' + current_unit_string + '/cm^2]$'
 else:
-    y_label = 'Current [$\mu$A]'
+    y_label = 'Current $[' + current_unit_string + ']$'
 
 if not axis_limits_preset_x:
     config['DEFAULT']['xmin'] = str(xmin-0.02*(xmax-xmin))
@@ -385,9 +414,9 @@ if config['DEFAULT']['plot_tafel'] == 'True':
     ax2.legend(handles, labels)
 
 if config_file:
-    filename = os.path.basename(os.path.splitext(config_file)[0])+'-LSV'
+    filename = os.path.basename(os.path.splitext(config_file)[0])
 else:
-    filename = os.path.basename(os.path.dirname(files_paths[0]))+'-LSV'
+    filename = os.path.basename(os.path.dirname(files_paths[0]))
     
 plt.savefig(os.path.join(os.path.dirname(files_paths[0]),filename+'.png'),bbox_inches='tight', dpi=300)
 try:
@@ -396,5 +425,4 @@ except PermissionError:
     plt.savefig(os.path.join(os.path.dirname(files_paths[0]),filename+'-RENAME_ME.pdf'),bbox_inches='tight')
     print('THE REQUESTED FILE NAME WAS UNAVAILABLE, SAVED WITH RENAME_ME SUFFIX INSTEAD')
 plt.show()
-
-
+root.withdraw()
