@@ -7,7 +7,7 @@
 import os
 import numpy as np #import diff,std,mean,array
 import re
-import CI_lib
+
 
 # find_ci_mean_min(dir_name, file_name):
 # return resistance_min
@@ -22,6 +22,7 @@ import CI_lib
 # return outliers_indexes
 
 def find_ci_mean_min(dir_name, file_name):
+    import CI_lib
     file_path_CI_scheme_1 = re.sub(r'_\d\d_LSV_C\d\d.mpt$', '_', file_name)
     file_path_CI_scheme_1 = re.sub(r'_\d\d_CV_C\d\d.mpt$', '_', file_path_CI_scheme_1)
 #    file_path_CI_scheme_2 = re.sub(r'.*_\d\d_LSV_C(\d\d).mpt$', '_C\g<1>.mpt', file_name)
