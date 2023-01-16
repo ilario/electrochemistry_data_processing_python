@@ -292,7 +292,7 @@ for j,identifier in enumerate(files_paths):
     if not isinstance(first_data_row, bool) and not isinstance(last_data_row, bool): 
         skiprows_list = skiprows_list + list(range(first_long_row+1,first_long_row+first_data_row+1)) + list(range(first_long_row+last_data_row, rows_count))
     print(file_path)
-    df = pd.read_csv(file_path, sep='\t', decimal=config[identifier]['decimal_separator'], skiprows=lambda x: x in skiprows_list)
+    df = pd.read_csv(file_path, sep='\t', decimal=config[identifier]['decimal_separator'], skiprows=lambda x: x in skiprows_list, encoding = 'iso-8859-1')
     
     if not loop_number == -1 and 'cycle number' in df.columns:
         df = df[df['cycle number'] == (loop_number + 1)]
@@ -415,14 +415,16 @@ if config['DEFAULT']['plot_tafel'] == 'True':
 
 if config_file:
     filename = os.path.basename(os.path.splitext(config_file)[0])
+    path = os.path.dirname(config_file)
 else:
     filename = os.path.basename(os.path.dirname(files_paths[0]))
+    path = os.path.dirname(files_paths[0])
     
-plt.savefig(os.path.join(os.path.dirname(files_paths[0]),filename+'.png'),bbox_inches='tight', dpi=300)
+plt.savefig(os.path.join(path,filename+'.png'),bbox_inches='tight', dpi=300)
 try:
-    plt.savefig(os.path.join(os.path.dirname(files_paths[0]),filename+'.pdf'),bbox_inches='tight')
+    plt.savefig(os.path.join(path,filename+'.pdf'),bbox_inches='tight')
 except PermissionError:
-    plt.savefig(os.path.join(os.path.dirname(files_paths[0]),filename+'-RENAME_ME.pdf'),bbox_inches='tight')
+    plt.savefig(os.path.join(path,filename+'-RENAME_ME.pdf'),bbox_inches='tight')
     print('THE REQUESTED FILE NAME WAS UNAVAILABLE, SAVED WITH RENAME_ME SUFFIX INSTEAD')
 plt.show()
 root.withdraw()
