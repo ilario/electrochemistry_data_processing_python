@@ -39,6 +39,13 @@ def find_ci_mean_min(dir_name, file_name):
     else:
         resistance_min = 0
     return resistance_min
+    
+def get_header_length(file_path):
+    with open(file_path, 'r', encoding='latin-1') as temp_f:
+        lines = temp_f.readlines()
+        first_long_row = int(str.split(lines[1])[-1]) -1 
+    temp_f.close()
+    return first_long_row
 
 def analyse_file(file_path):
     # Loop the data lines to find the row where the data starts, which is when the number of tabulations stops increasing
@@ -49,9 +56,9 @@ def analyse_file(file_path):
     surface_found = False
     repetitions = 0
     cycle_number_column = 0
+    first_long_row = get_header_length(file_path)
     with open(file_path, 'r', encoding='latin-1') as temp_f:
         lines = temp_f.readlines()
-        first_long_row = int(str.split(lines[1])[-1]) - 1
         for i, line in enumerate(lines[0:200]):
             # Count the column count for the current line
             #column_count = len(line.split('\t')) + 1
