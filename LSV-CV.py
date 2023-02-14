@@ -135,11 +135,13 @@ plt.axhline(y=0, color='lightgray', linestyle='-')
 for j,identifier in enumerate(files_paths):
     # in the future, the identifier could be different from the file_path, for example if we want to plot the same file more than once
     file_path = identifier
+    if not os.path.exists(file_path):
+        root.withdraw()
+        raise FileNotFoundError("ERROR: File " + file_path + " does not exist!")
     file_name = os.path.basename(file_path)
     dir_name = os.path.dirname(file_path)
     if "_CV_" in file_name:
         theres_no_CV = False
-
     try:
         label_suggested = re.search('-(.+)-.+?_\d\d_LSV', file_name).group(1)
     except AttributeError:
@@ -151,7 +153,7 @@ for j,identifier in enumerate(files_paths):
     if automated:
         config[identifier]['label_string'] = config[identifier].get('label_string') or label_suggested
         if not config[identifier]['r_correct'] == '0.0':
-            config[identifier]['resistance'] =  config[identifier].get('resistance') or str(find_ci_mean_min(dir_name, file_name))
+            config[identifier]['resistance'] =  config[identifier].get('resistance') or str(find_ci_mean_min)
     else:
         first_long_row, reference_suggested, reference_original, surface, decimal_separator, repetitions = analyse_file(file_path)
         config[identifier] = {}
