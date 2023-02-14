@@ -47,6 +47,17 @@ def get_header_length(file_path):
     temp_f.close()
     return first_long_row
 
+def get_decimal_separator(file_path):
+    with open(file_path, 'r', encoding='latin-1') as temp_f:
+        lines = temp_f.readlines()
+        if ',' in lines[-1]:
+
+            decimal_separator = ','
+        else:
+            decimal_separator = '.'
+    temp_f.close()
+    return decimal_separator
+
 def analyse_file(file_path):
     # Loop the data lines to find the row where the data starts, which is when the number of tabulations stops increasing
     reference_original = 0
@@ -86,10 +97,7 @@ def analyse_file(file_path):
             if not cycle_number_column_position == -1:
                 cycle_number_column = line.count("\t", 0, cycle_number_column_position)
         #take the last line and check if the decimal separator is comma or period
-        if ',' in lines[i]:
-            decimal_separator = ','
-        else:
-            decimal_separator = '.'
+        decimal_separator = get_decimal_separator(file_path)
         if not repetitions and cycle_number_column:
             repetitions_string = str.split(lines[-1])[cycle_number_column]
             if decimal_separator == ',':

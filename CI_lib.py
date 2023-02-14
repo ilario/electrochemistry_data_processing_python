@@ -13,7 +13,7 @@ def get_resistance(file_path):
     print(file_path)
     first_long_row, reference_suggested, reference_original, surface, decimal_separator, repetitions = ec.analyse_file(file_path)
     skiprows_list = list(range(first_long_row))
-    df = pd.read_csv(file_path, sep='\t', decimal=decimal_separator, skiprows=lambda x: x in skiprows_list, encoding = 'iso-8859-1´)
+    df = pd.read_csv(file_path, sep='\t', decimal=decimal_separator, skiprows=lambda x: x in skiprows_list, encoding = 'iso-8859-1')
 
     # Plot and show our data
     potential=df['Ewe/V']
