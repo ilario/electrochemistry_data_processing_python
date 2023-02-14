@@ -41,17 +41,18 @@ def find_ci_mean_min(dir_name, file_name):
     return resistance_min
     
 def get_header_length(file_path):
+    check_file_existence(file_path)
     with open(file_path, 'r', encoding='latin-1') as temp_f:
         lines = temp_f.readlines()
-        first_long_row = int(str.split(lines[1])[-1]) -1 
+        first_long_row = int(str.split(lines[1])[-1]) -1
     temp_f.close()
     return first_long_row
 
 def get_decimal_separator(file_path):
+    check_file_existence(file_path)
     with open(file_path, 'r', encoding='latin-1') as temp_f:
         lines = temp_f.readlines()
         if ',' in lines[-1]:
-
             decimal_separator = ','
         else:
             decimal_separator = '.'
@@ -68,6 +69,7 @@ def analyse_file(file_path):
     repetitions = 0
     cycle_number_column = 0
     first_long_row = get_header_length(file_path)
+    check_file_existence(file_path)
     with open(file_path, 'r', encoding='latin-1') as temp_f:
         lines = temp_f.readlines()
         for i, line in enumerate(lines[0:200]):
@@ -111,6 +113,7 @@ def analyse_file(file_path):
 def analyse_file_loop_number(file_path, loop_number):
     first_data_row = False
     last_data_row = False
+    check_file_existence(file_path)
     with open(file_path, 'r', encoding='latin-1') as temp_f:
         lines = temp_f.readlines()
         rows_count = len(lines)
@@ -119,7 +122,7 @@ def analyse_file_loop_number(file_path, loop_number):
 #               tmp_first_data_row = int(str.split(line)[5])
                 if str.split(line)[1] == str(loop_number):
                     first_data_row = int(str.split(line)[5]) #tmp_first_data_row
-                    last_data_row = int(str.split(line)[7])            
+                    last_data_row = int(str.split(line)[7])
     temp_f.close()
     return first_data_row, last_data_row, rows_count
             
@@ -142,3 +145,6 @@ def find_outliers(data):
             outliers_indexes.append(i)
     return outliers_indexes
 
+def check_file_existence(file_path):
+    if not os.path.exists(file_path):
+        raise FileNotFoundError("ERROR: File " + file_path + " does not exist!")
